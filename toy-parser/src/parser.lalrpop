@@ -1,0 +1,28 @@
+use crate::ast::Ast;
+
+grammar;
+
+pub Module: Ast = {
+    FunctionDeclaration => {
+      Ast::Module {
+        contents: Box::new(<>),
+      }
+    }
+};
+
+FunctionDeclaration: Ast = {
+    "fn" <id:Identifier> "(" ")" <expression: ExpressionBlock> => {
+      Ast::Function {
+        id,
+        body: Box::new(expression),
+      }
+    }
+};
+
+Identifier: String = {
+    r"[_[:alpha:]][_[:alnum:]]*" => <>.to_string(),
+};
+
+ExpressionBlock: Ast = {
+    "{" "}" => Ast::None,
+};

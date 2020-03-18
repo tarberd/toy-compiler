@@ -1,7 +1,16 @@
+use lalrpop_util::lalrpop_mod;
+
+lalrpop_mod!(pub parser);
+
+pub mod ast;
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn parser() {
+        assert!(parser::ModuleParser::new().parse("{}").is_ok());
+        assert!(parser::ModuleParser::new().parse("{}").is_ok());
     }
 }

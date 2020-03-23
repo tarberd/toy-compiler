@@ -1,21 +1,23 @@
-use crate::ast::Ast;
+use crate::ast::*;
 
 grammar;
 
 pub Module: Ast = {
     FunctionDeclaration => {
-      Ast::Module {
-        contents: Box::new(<>),
-      }
+        Ast::Module {
+            contents: Box::new(<>),
+        }
     }
 };
 
 FunctionDeclaration: Ast = {
     "fn" <id:Identifier> "(" ")" <expression: ExpressionBlock> => {
-      Ast::Function {
-        id,
-        body: Box::new(expression),
-      }
+        Ast::Function(
+            FunctionDeclaration {
+                id,
+                body: expression,
+            }
+        )
     }
 };
 
@@ -23,6 +25,14 @@ Identifier: String = {
     r"[_[:alpha:]][_[:alnum:]]*" => <>.to_string(),
 };
 
-ExpressionBlock: Ast = {
-    "{" "}" => Ast::None,
+ExpressionBlock: ExpressionBlock = {
+    "{" <return_expression: IntegerLiteral> "}" => {
+        ExpressionBlock {
+            return_expression: return_expression,
+        }
+    }
 };
+
+IntegerLiteral: i32 = {
+    r"[[:digit:]]+" => <>.parse().unwrap(),
+}

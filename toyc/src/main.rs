@@ -67,7 +67,7 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
         Ast::Module { contents } => {
             ast_to_llvm_module(contents, module);
         }
-        Ast::Function { id, body: _ } => {
+        Ast::Function(function_declaration) => {
             let function_type = unsafe {
                 let mut parameter_types = [];
 
@@ -82,7 +82,9 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
             let function = unsafe {
                 llvm::core::LLVMAddFunction(
                     module,
-                    CString::new(id.clone()).unwrap().as_ptr(),
+                    CString::new(function_declaration.id.clone())
+                        .unwrap()
+                        .as_ptr(),
                     function_type,
                 )
             };
@@ -98,7 +100,14 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
 
             unsafe {
                 llvm::core::LLVMPositionBuilderAtEnd(builder, function_block);
-                llvm::core::LLVMBuildRetVoid(builder);
+                llvm::core::LLVMBuildRet(
+                    builder,
+                    llvm::core::LLVMConstInt(
+                        llvm::core::LLVMInt32Type(),
+                        function_declaration.body.return_expression as std::os::raw::c_ulonglong,
+                        0 as std::os::raw::c_int,
+                    ),
+                );
                 llvm::core::LLVMDisposeBuilder(builder);
             }
         }

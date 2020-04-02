@@ -65,15 +65,82 @@ pub fn drive(config: Config) {
     }
 
     unsafe {
-        llvm::bit_writer::LLVMWriteBitcodeToFile(
-            llvm_module,
-            CString::new(format!(
-                "{}.bc",
-                config.file.file_name().unwrap().to_str().unwrap()
-            ))
-            .expect("Failed to create CString from output file name: {}")
-            .as_ptr(),
+        let target_triple = llvm::target_machine::LLVMGetDefaultTargetTriple();
+        let target_cpu = llvm::target_machine::LLVMGetHostCPUName();
+        let target_features = llvm::target_machine::LLVMGetHostCPUFeatures();
+
+        match llvm::target::LLVM_InitializeNativeTarget() {
+            1 => {
+                println!("Failed to initialize llvm native target");
+                return;
+            }
+            _ => (),
+        };
+
+        match llvm::target::LLVM_InitializeNativeAsmPrinter() {
+            1 => {
+                println!("Failed to initialize llvm native target");
+                return;
+            }
+            _ => (),
+        };
+        //
+        // match llvm::target::LLVM_InitializeNativeAsmParser() {
+        //     1 => {
+        //         println!("Failed to initialize llvm native target");
+        //         return;
+        //     }
+        //     _ => (),
+        // };
+        //
+        // match llvm::target::LLVM_InitializeNativeDisassembler() {
+        //     1 => {
+        //         println!("Failed to initialize llvm native target");
+        //         return;
+        //     }
+        //     _ => (),
+        // };
+
+        let llvm_target = llvm::target_machine::LLVMGetFirstTarget();
+
+        let opt_level = llvm::target_machine::LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault;
+        let reloc_mode = llvm::target_machine::LLVMRelocMode::LLVMRelocDefault;
+        let code_model = llvm::target_machine::LLVMCodeModel::LLVMCodeModelDefault;
+
+        let target_machine = llvm::target_machine::LLVMCreateTargetMachine(
+            llvm_target,
+            target_triple,
+            target_cpu,
+            target_features,
+            opt_level,
+            reloc_mode,
+            code_model,
         );
+
+        let mut x: Vec<std::os::raw::c_char> = vec!['a', 'b', 'c', '\0']
+            .into_iter()
+            .map(|x| x as std::os::raw::c_char)
+            .collect();
+        let slice = x.as_mut_slice();
+        let ptr = slice.as_mut_ptr();
+
+        let codegen = llvm::target_machine::LLVMCodeGenFileType::LLVMObjectFile;
+
+        let err: *mut *mut std::os::raw::c_char = [].as_mut_ptr();
+
+        match llvm::target_machine::LLVMTargetMachineEmitToFile(
+            target_machine,
+            llvm_module,
+            ptr,
+            codegen,
+            err,
+        ) {
+            1 => {
+                println!("Failed to initialize llvm native target");
+                return;
+            }
+            _ => (),
+        }
     };
 
     unsafe {

@@ -1,19 +1,34 @@
-pub enum Type {
-    Integer,
-}
-
+#[derive(Debug)]
 pub enum Ast {
     Module { contents: Box<Ast> },
-    Function(FunctionDeclaration),
-    ExpressionBlock(ExpressionBlock),
+    FunctionDeclaration { id: String, body: Expression, args: Vec<String> },
+    Expression(Expression),
     None,
 }
 
-pub struct ExpressionBlock {
-    pub return_expression: i32,
+#[derive(Debug)]
+pub enum Operator {
+    Plus,
+    Minus,
+    Mul,
+    Div,
 }
 
-pub struct FunctionDeclaration {
-    pub id: String,
-    pub body: ExpressionBlock,
+#[derive(Debug)]
+pub enum Expression {
+    Block {
+        return_expression: Box<Expression>,
+    },
+    Unary {
+        operator: Operator,
+        expression: Box<Expression>,
+    },
+    Binary {
+        operator: Operator,
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    IntegerLiteral {
+        value: i32,
+    },
 }

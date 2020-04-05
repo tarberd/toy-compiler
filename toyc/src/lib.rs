@@ -1,6 +1,6 @@
 use llvm_sys as llvm;
 use std::ffi::CString;
-use toy_parser::ast::Ast;
+use toy_parser::ast::{Ast, Expression, Operator};
 
 #[derive(Debug, structopt::StructOpt)]
 pub struct Config {
@@ -46,6 +46,8 @@ pub fn drive(config: Config) {
 
     let ast = ModuleParser::new().parse(&file_buffer).unwrap();
 
+    println!("{:#?}", ast);
+
     let llvm_module = unsafe {
         use std::os::unix::ffi::OsStringExt;
         llvm::core::LLVMModuleCreateWithName(
@@ -84,22 +86,6 @@ pub fn drive(config: Config) {
             }
             _ => (),
         };
-        //
-        // match llvm::target::LLVM_InitializeNativeAsmParser() {
-        //     1 => {
-        //         println!("Failed to initialize llvm native target");
-        //         return;
-        //     }
-        //     _ => (),
-        // };
-        //
-        // match llvm::target::LLVM_InitializeNativeDisassembler() {
-        //     1 => {
-        //         println!("Failed to initialize llvm native target");
-        //         return;
-        //     }
-        //     _ => (),
-        // };
 
         let llvm_target = llvm::target_machine::LLVMGetFirstTarget();
 
@@ -153,7 +139,14 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
         Ast::Module { contents } => {
             ast_to_llvm_module(contents, module);
         }
-        Ast::Function(function_declaration) => {
+        // Ast::Expression(expr) => {
+        //     expression_to_llvm_module(expr, module);
+        // }
+        Ast::FunctionDeclaration {
+            id,
+            body,
+            args: _args,
+        } => {
             let function_type = unsafe {
                 let mut parameter_types = [];
 
@@ -164,13 +157,10 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
                     0,
                 )
             };
-
             let function = unsafe {
                 llvm::core::LLVMAddFunction(
                     module,
-                    CString::new(function_declaration.id.clone())
-                        .unwrap()
-                        .as_ptr(),
+                    CString::new(id.clone()).unwrap().as_ptr(),
                     function_type,
                 )
             };
@@ -183,20 +173,68 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
             };
 
             let builder = unsafe { llvm::core::LLVMCreateBuilder() };
-
             unsafe {
                 llvm::core::LLVMPositionBuilderAtEnd(builder, function_block);
-                llvm::core::LLVMBuildRet(
-                    builder,
-                    llvm::core::LLVMConstInt(
-                        llvm::core::LLVMInt32Type(),
-                        function_declaration.body.return_expression as std::os::raw::c_ulonglong,
-                        0 as std::os::raw::c_int,
-                    ),
-                );
+                llvm::core::LLVMBuildRet(builder, const_expression_to_llvm_valueref(body));
                 llvm::core::LLVMDisposeBuilder(builder);
             }
         }
         _ => (),
     };
+}
+
+fn const_expression_to_llvm_valueref(expression: &Expression) -> *mut llvm::LLVMValue {
+    match expression {
+        Expression::IntegerLiteral { value } => unsafe {
+            llvm::core::LLVMConstInt(
+                llvm::core::LLVMInt32Type(),
+                *value as std::os::raw::c_ulonglong,
+                0 as std::os::raw::c_int,
+            )
+        },
+        Expression::Unary {
+            operator,
+            expression,
+        } => match operator {
+            Operator::Minus => unsafe {
+                llvm::core::LLVMConstNeg(const_expression_to_llvm_valueref(expression))
+            },
+            _ => panic!("only minus is a unary operator"),
+        },
+        Expression::Binary {
+            operator,
+            left,
+            right,
+        } => match operator {
+            Operator::Plus => unsafe {
+                llvm::core::LLVMConstAdd(
+                    const_expression_to_llvm_valueref(left),
+                    const_expression_to_llvm_valueref(right),
+                )
+            },
+            Operator::Minus => unsafe {
+                llvm::core::LLVMConstSub(
+                    const_expression_to_llvm_valueref(left),
+                    const_expression_to_llvm_valueref(right),
+                )
+            },
+            Operator::Mul => unsafe {
+                llvm::core::LLVMConstMul(
+                    const_expression_to_llvm_valueref(left),
+                    const_expression_to_llvm_valueref(right),
+                )
+            },
+            Operator::Div => unsafe {
+                llvm::core::LLVMConstSDiv(
+                    const_expression_to_llvm_valueref(left),
+                    const_expression_to_llvm_valueref(right),
+                )
+            },
+        },
+        Expression::Block {
+            return_expression,
+        } => {
+            const_expression_to_llvm_valueref(return_expression)
+        }
+    }
 }

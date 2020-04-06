@@ -1,5 +1,5 @@
 use llvm_sys as llvm;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use toy_parser::ast::{Ast, Expression, Operator};
 
 #[derive(Debug, structopt::StructOpt)]
@@ -137,18 +137,13 @@ pub fn drive(config: Config) {
 fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
     match ast {
         Ast::Module { contents } => {
-            ast_to_llvm_module(contents, module);
+            for content in contents {
+                ast_to_llvm_module(content, module);
+            }
         }
-        // Ast::Expression(expr) => {
-        //     expression_to_llvm_module(expr, module);
-        // }
-        Ast::FunctionDeclaration {
-            id,
-            body,
-            args: _args,
-        } => {
+        Ast::FunctionDeclaration { id, body, args } => {
             let function_type = unsafe {
-                let mut parameter_types = [];
+                let mut parameter_types = vec![llvm::core::LLVMInt32Type(); args.len()];
 
                 llvm::core::LLVMFunctionType(
                     llvm::core::LLVMInt32Type(),
@@ -157,6 +152,7 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
                     0,
                 )
             };
+
             let function = unsafe {
                 llvm::core::LLVMAddFunction(
                     module,
@@ -164,6 +160,28 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
                     function_type,
                 )
             };
+
+            unsafe {
+                let function_args = Vec::with_capacity(args.len());
+
+                let mut function_args = std::mem::ManuallyDrop::new(function_args);
+
+                llvm::core::LLVMGetParams(function, function_args.as_mut_ptr());
+
+                let function_args = Vec::from_raw_parts(
+                    function_args.as_mut_ptr(),
+                    function_args.capacity(),
+                    function_args.capacity(),
+                );
+
+                for (value, name) in function_args.iter().zip(args.iter()) {
+                    llvm::core::LLVMSetValueName2(
+                        *value,
+                        CString::new(name.as_str()).unwrap().as_ptr(),
+                        name.len(),
+                    );
+                }
+            }
 
             let function_block = unsafe {
                 llvm::core::LLVMAppendBasicBlock(
@@ -175,7 +193,7 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
             let builder = unsafe { llvm::core::LLVMCreateBuilder() };
             unsafe {
                 llvm::core::LLVMPositionBuilderAtEnd(builder, function_block);
-                llvm::core::LLVMBuildRet(builder, const_expression_to_llvm_valueref(body));
+                llvm::core::LLVMBuildRet(builder, const_expression_to_llvm_valueref(body, builder));
                 llvm::core::LLVMDisposeBuilder(builder);
             }
         }
@@ -183,7 +201,10 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
     };
 }
 
-fn const_expression_to_llvm_valueref(expression: &Expression) -> *mut llvm::LLVMValue {
+fn const_expression_to_llvm_valueref(
+    expression: &Expression,
+    builder: *mut llvm::LLVMBuilder,
+) -> *mut llvm::LLVMValue {
     match expression {
         Expression::IntegerLiteral { value } => unsafe {
             llvm::core::LLVMConstInt(
@@ -192,12 +213,20 @@ fn const_expression_to_llvm_valueref(expression: &Expression) -> *mut llvm::LLVM
                 0 as std::os::raw::c_int,
             )
         },
+        Expression::Identifier { id: _id } => unsafe {
+            let value: i32 = 0;
+            llvm::core::LLVMConstInt(
+                llvm::core::LLVMInt32Type(),
+                value as std::os::raw::c_ulonglong,
+                0 as std::os::raw::c_int,
+            )
+        },
         Expression::Unary {
             operator,
             expression,
         } => match operator {
             Operator::Minus => unsafe {
-                llvm::core::LLVMConstNeg(const_expression_to_llvm_valueref(expression))
+                llvm::core::LLVMConstNeg(const_expression_to_llvm_valueref(expression, builder))
             },
             _ => panic!("only minus is a unary operator"),
         },
@@ -207,34 +236,40 @@ fn const_expression_to_llvm_valueref(expression: &Expression) -> *mut llvm::LLVM
             right,
         } => match operator {
             Operator::Plus => unsafe {
-                llvm::core::LLVMConstAdd(
-                    const_expression_to_llvm_valueref(left),
-                    const_expression_to_llvm_valueref(right),
+                llvm::core::LLVMBuildAdd(
+                    builder,
+                    const_expression_to_llvm_valueref(left, builder),
+                    const_expression_to_llvm_valueref(right, builder),
+                    CStr::from_bytes_with_nul_unchecked(b"tmp\0").as_ptr(),
                 )
             },
             Operator::Minus => unsafe {
-                llvm::core::LLVMConstSub(
-                    const_expression_to_llvm_valueref(left),
-                    const_expression_to_llvm_valueref(right),
+                llvm::core::LLVMBuildSub(
+                    builder,
+                    const_expression_to_llvm_valueref(left, builder),
+                    const_expression_to_llvm_valueref(right, builder),
+                    CStr::from_bytes_with_nul_unchecked(b"tmp\0").as_ptr(),
                 )
             },
             Operator::Mul => unsafe {
-                llvm::core::LLVMConstMul(
-                    const_expression_to_llvm_valueref(left),
-                    const_expression_to_llvm_valueref(right),
+                llvm::core::LLVMBuildMul(
+                    builder,
+                    const_expression_to_llvm_valueref(left, builder),
+                    const_expression_to_llvm_valueref(right, builder),
+                    CStr::from_bytes_with_nul_unchecked(b"tmp\0").as_ptr(),
                 )
             },
             Operator::Div => unsafe {
-                llvm::core::LLVMConstSDiv(
-                    const_expression_to_llvm_valueref(left),
-                    const_expression_to_llvm_valueref(right),
+                llvm::core::LLVMBuildSDiv(
+                    builder,
+                    const_expression_to_llvm_valueref(left, builder),
+                    const_expression_to_llvm_valueref(right, builder),
+                    CStr::from_bytes_with_nul_unchecked(b"tmp\0").as_ptr(),
                 )
             },
         },
-        Expression::Block {
-            return_expression,
-        } => {
-            const_expression_to_llvm_valueref(return_expression)
+        Expression::Block { return_expression } => {
+            const_expression_to_llvm_valueref(return_expression, builder)
         }
     }
 }

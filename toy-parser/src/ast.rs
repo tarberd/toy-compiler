@@ -1,7 +1,13 @@
 #[derive(Debug)]
 pub enum Ast {
-    Module { contents: Box<Ast> },
-    FunctionDeclaration { id: String, body: Expression, args: Vec<String> },
+    Module {
+        contents: Vec<Box<Ast>>,
+    },
+    FunctionDeclaration {
+        id: String,
+        body: Expression,
+        args: Vec<String>,
+    },
     Expression(Expression),
     None,
 }
@@ -31,4 +37,7 @@ pub enum Expression {
     IntegerLiteral {
         value: i32,
     },
+    Identifier {
+        id: String
+    }
 }

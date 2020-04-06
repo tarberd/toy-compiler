@@ -3,19 +3,27 @@ use crate::ast::*;
 grammar;
 
 pub Module: Ast = {
-    FunctionDeclaration => Ast::Module { contents: Box::new(<>) },
+    <mut list: FunctionDeclaration*> => Ast::Module { contents: list.drain(..).map(|x| Box::new(x)).collect() },
 };
 
 FunctionDeclaration: Ast = {
-    "fn" <id: Identifier> "(" <arg: (Identifier ","?)? >  ")" "=>" <body: Expression> => {
-        let args = match arg {
-            Some(x) => vec![x.0],
+    "fn" <id: Identifier> "(" <args: ArgumentList?>  ")" "=>" <body: Expression> => {
+        let args = match args {
+            Some(args) => args,
             None => vec![],
         };
 
         Ast::FunctionDeclaration { id, body, args }
     }
 };
+
+ArgumentList: Vec<String> = {
+    <mut id_list: (Identifier ",")*>  <id: Identifier> ","? => {
+        let mut id_list: Vec<String> = id_list.drain(..).map(|x| x.0).collect();
+        id_list.push(id);
+        id_list
+    }
+}
 
 Identifier: String = {
     r"[_[:alpha:]][_[:alnum:]]*" => <>.to_string(),
@@ -81,4 +89,5 @@ NestedExpression: Expression = {
 
 LeafExpression: Expression = {
   IntegerLiteral,
+  Identifier => Expression::Identifier { id: <> },
 }

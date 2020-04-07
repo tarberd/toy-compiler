@@ -1,0 +1,24 @@
+image: archlinux
+packages:
+  - base-devel
+  - git
+  - rustup
+  - llvm
+sources:
+  - https://github.com/tarberd/toy-compiler
+tasks:
+  - setup: |
+      rustup default stable
+      rustup component add clippy
+
+  - test: |
+      cd toy-compiler
+      cargo test
+
+  - build: |
+      cd toy-compiler
+      cargo build
+
+  - clipy: |
+      cd toy-compiler
+      cargo clippy --all-targets --all-features -- -D warnings

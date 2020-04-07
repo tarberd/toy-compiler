@@ -3,7 +3,7 @@ use crate::ast::*;
 grammar;
 
 pub Module: Ast = {
-    <mut list: FunctionDeclaration*> => Ast::Module { contents: list.drain(..).map(|x| Box::new(x)).collect() },
+    FunctionDeclaration* => Ast::Module { contents: <> },
 };
 
 FunctionDeclaration: Ast = {

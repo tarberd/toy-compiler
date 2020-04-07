@@ -10,12 +10,19 @@ pub struct Config {
 
     #[structopt(short, long)]
     pub emit_llvm_ir: bool,
+
+    #[structopt(short = "a", long)]
+    pub emit_ast: bool,
 }
 
 pub fn drive(config: Config) {
     use std::fs::File;
     use std::io::prelude::Read;
     use toy_parser::parser::ModuleParser;
+
+    if !config.file.is_file() {
+        panic!("Please provide a valid file");
+    }
 
     let file_buffer = match File::open(&config.file) {
         Ok(mut file) => {
@@ -47,15 +54,15 @@ pub fn drive(config: Config) {
 
     let ast = ModuleParser::new().parse(&file_buffer).unwrap();
 
-    println!("{:#?}", ast);
+    if config.emit_ast {
+        println!("{:#?}", ast);
+    }
 
     let llvm_module = unsafe {
-        use std::os::unix::ffi::OsStringExt;
-        llvm::core::LLVMModuleCreateWithName(
-            CString::new(config.file.file_name().unwrap().to_owned().into_vec())
-                .expect("Failed to create CString.")
-                .as_ptr(),
-        )
+        let c_module_name =
+            CString::new(config.file.file_name().unwrap().to_str().unwrap()).unwrap();
+
+        llvm::core::LLVMModuleCreateWithName(c_module_name.as_ptr())
     };
 
     ast_to_llvm_module(&ast, llvm_module);
@@ -72,20 +79,12 @@ pub fn drive(config: Config) {
         let target_cpu = llvm::target_machine::LLVMGetHostCPUName();
         let target_features = llvm::target_machine::LLVMGetHostCPUFeatures();
 
-        match llvm::target::LLVM_InitializeNativeTarget() {
-            1 => {
-                println!("Failed to initialize llvm native target");
-                return;
-            }
-            _ => (),
+        if let 1 = llvm::target::LLVM_InitializeNativeTarget() {
+            panic!("Failed to initialize llvm native target");
         };
 
-        match llvm::target::LLVM_InitializeNativeAsmPrinter() {
-            1 => {
-                println!("Failed to initialize llvm native target");
-                return;
-            }
-            _ => (),
+        if let 1 = llvm::target::LLVM_InitializeNativeAsmPrinter() {
+            panic!("Failed to initialize llvm native target");
         };
 
         let llvm_target = llvm::target_machine::LLVMGetFirstTarget();
@@ -115,19 +114,15 @@ pub fn drive(config: Config) {
 
         let err: *mut *mut std::os::raw::c_char = [].as_mut_ptr();
 
-        match llvm::target_machine::LLVMTargetMachineEmitToFile(
+        if let 1 = llvm::target_machine::LLVMTargetMachineEmitToFile(
             target_machine,
             llvm_module,
             ptr,
             codegen,
             err,
         ) {
-            1 => {
-                println!("Failed to initialize llvm native target");
-                return;
-            }
-            _ => (),
-        }
+            panic!("Failed to initialize llvm native target");
+        };
     };
 
     unsafe {
@@ -155,11 +150,9 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
             };
 
             let function = unsafe {
-                llvm::core::LLVMAddFunction(
-                    module,
-                    CString::new(id.clone()).unwrap().as_ptr(),
-                    function_type,
-                )
+                let c_name = CString::new(id.as_str()).unwrap();
+
+                llvm::core::LLVMAddFunction(module, c_name.as_ptr(), function_type)
             };
 
             let mut function_variables = HashMap::new();
@@ -181,11 +174,11 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
 
                 for (value, name) in function_args.iter().zip(args.iter()) {
                     function_variables.insert(name.clone(), *value);
-                    llvm::core::LLVMSetValueName2(
-                        *value,
-                        CString::new(name.as_str()).unwrap().as_ptr(),
-                        name.len(),
-                    );
+
+                    let c_name = CString::new(name.as_str()).unwrap();
+                    let c_name_len = c_name.as_bytes().len();
+
+                    llvm::core::LLVMSetValueName2(*value, c_name.as_ptr(), c_name_len);
                 }
             }
 
@@ -235,7 +228,7 @@ fn const_expression_to_llvm_valueref(
                     CStr::from_bytes_with_nul_unchecked(b"neg_tmp\0").as_ptr(),
                 )
             },
-            _ => panic!("{:?} is not a unary operator"),
+            _ => panic!("{:?} is not a unary operator", operator),
         },
         Expression::Binary {
             operator,
@@ -274,7 +267,7 @@ fn const_expression_to_llvm_valueref(
                     CStr::from_bytes_with_nul_unchecked(b"div_tmp\0").as_ptr(),
                 )
             },
-            _ => panic!("{:?} is not a binary operator."),
+            _ => panic!("{:?} is not a binary operator.", operator),
         },
         Expression::Block { return_expression } => {
             const_expression_to_llvm_valueref(return_expression, builder, variables)

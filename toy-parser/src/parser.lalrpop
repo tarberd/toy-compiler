@@ -74,7 +74,7 @@ UnaryFactorExpression: Expression = {
 };
 
 UnaryFactorOperator: Operator = {
-    "-" => Operator::Minus,
+    "-" => Operator::Neg,
 }
 
 BlockExpression: Expression = {

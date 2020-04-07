@@ -9,13 +9,10 @@
 
 ### help
 
-enter the `toyc` folder, and:
-
 ```bash
+# will show all possible commands
 cargo run -- -h
 ```
-
-will show all possible commands
 
 ### emit LLVM intermediate representation
 

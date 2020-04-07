@@ -1,7 +1,7 @@
 use llvm_sys as llvm;
+use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use toy_parser::ast::{Ast, Expression, Operator};
-use std::collections::HashMap;
 
 #[derive(Debug, structopt::StructOpt)]
 pub struct Config {
@@ -199,7 +199,10 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
             let builder = unsafe { llvm::core::LLVMCreateBuilder() };
             unsafe {
                 llvm::core::LLVMPositionBuilderAtEnd(builder, function_block);
-                llvm::core::LLVMBuildRet(builder, const_expression_to_llvm_valueref(body, builder, &function_variables));
+                llvm::core::LLVMBuildRet(
+                    builder,
+                    const_expression_to_llvm_valueref(body, builder, &function_variables),
+                );
                 llvm::core::LLVMDisposeBuilder(builder);
             }
         }
@@ -210,7 +213,7 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule) {
 fn const_expression_to_llvm_valueref(
     expression: &Expression,
     builder: *mut llvm::LLVMBuilder,
-    variables: &HashMap<String, *mut llvm::LLVMValue>
+    variables: &HashMap<String, *mut llvm::LLVMValue>,
 ) -> *mut llvm::LLVMValue {
     match expression {
         Expression::IntegerLiteral { value } => unsafe {
@@ -225,10 +228,14 @@ fn const_expression_to_llvm_valueref(
             operator,
             expression,
         } => match operator {
-            Operator::Minus => unsafe {
-                llvm::core::LLVMConstNeg(const_expression_to_llvm_valueref(expression, builder, variables))
+            Operator::Neg => unsafe {
+                llvm::core::LLVMBuildNeg(
+                    builder,
+                    const_expression_to_llvm_valueref(expression, builder, variables),
+                    CStr::from_bytes_with_nul_unchecked(b"neg_tmp\0").as_ptr(),
+                )
             },
-            _ => panic!("only minus is a unary operator"),
+            _ => panic!("{:?} is not a unary operator"),
         },
         Expression::Binary {
             operator,
@@ -240,7 +247,7 @@ fn const_expression_to_llvm_valueref(
                     builder,
                     const_expression_to_llvm_valueref(left, builder, variables),
                     const_expression_to_llvm_valueref(right, builder, variables),
-                    CStr::from_bytes_with_nul_unchecked(b"tmp\0").as_ptr(),
+                    CStr::from_bytes_with_nul_unchecked(b"add_tmp\0").as_ptr(),
                 )
             },
             Operator::Minus => unsafe {
@@ -248,7 +255,7 @@ fn const_expression_to_llvm_valueref(
                     builder,
                     const_expression_to_llvm_valueref(left, builder, variables),
                     const_expression_to_llvm_valueref(right, builder, variables),
-                    CStr::from_bytes_with_nul_unchecked(b"tmp\0").as_ptr(),
+                    CStr::from_bytes_with_nul_unchecked(b"sub_tmp\0").as_ptr(),
                 )
             },
             Operator::Mul => unsafe {
@@ -256,7 +263,7 @@ fn const_expression_to_llvm_valueref(
                     builder,
                     const_expression_to_llvm_valueref(left, builder, variables),
                     const_expression_to_llvm_valueref(right, builder, variables),
-                    CStr::from_bytes_with_nul_unchecked(b"tmp\0").as_ptr(),
+                    CStr::from_bytes_with_nul_unchecked(b"mul_tmp\0").as_ptr(),
                 )
             },
             Operator::Div => unsafe {
@@ -264,9 +271,10 @@ fn const_expression_to_llvm_valueref(
                     builder,
                     const_expression_to_llvm_valueref(left, builder, variables),
                     const_expression_to_llvm_valueref(right, builder, variables),
-                    CStr::from_bytes_with_nul_unchecked(b"tmp\0").as_ptr(),
+                    CStr::from_bytes_with_nul_unchecked(b"div_tmp\0").as_ptr(),
                 )
             },
+            _ => panic!("{:?} is not a binary operator."),
         },
         Expression::Block { return_expression } => {
             const_expression_to_llvm_valueref(return_expression, builder, variables)

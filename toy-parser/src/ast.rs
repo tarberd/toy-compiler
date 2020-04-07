@@ -18,6 +18,7 @@ pub enum Operator {
     Minus,
     Mul,
     Div,
+    Neg,
 }
 
 #[derive(Debug)]

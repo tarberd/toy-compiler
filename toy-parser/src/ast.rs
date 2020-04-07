@@ -1,10 +1,43 @@
+#[derive(Debug)]
 pub enum Ast {
-    Module{
-        contents: Box<Ast>,
+    Module {
+        contents: Vec<Box<Ast>>,
     },
-    Function{
+    FunctionDeclaration {
         id: String,
-        body: Box<Ast>,
+        body: Expression,
+        args: Vec<String>,
     },
+    Expression(Expression),
     None,
+}
+
+#[derive(Debug)]
+pub enum Operator {
+    Plus,
+    Minus,
+    Mul,
+    Div,
+}
+
+#[derive(Debug)]
+pub enum Expression {
+    Block {
+        return_expression: Box<Expression>,
+    },
+    Unary {
+        operator: Operator,
+        expression: Box<Expression>,
+    },
+    Binary {
+        operator: Operator,
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    IntegerLiteral {
+        value: i32,
+    },
+    Identifier {
+        id: String
+    }
 }

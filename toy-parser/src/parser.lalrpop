@@ -1,28 +1,93 @@
-use crate::ast::Ast;
+use crate::ast::*;
 
 grammar;
 
 pub Module: Ast = {
-    FunctionDeclaration => {
-      Ast::Module {
-        contents: Box::new(<>),
-      }
-    }
+    <mut list: FunctionDeclaration*> => Ast::Module { contents: list.drain(..).map(|x| Box::new(x)).collect() },
 };
 
 FunctionDeclaration: Ast = {
-    "fn" <id:Identifier> "(" ")" <expression: ExpressionBlock> => {
-      Ast::Function {
-        id,
-        body: Box::new(expression),
-      }
+    "fn" <id: Identifier> "(" <args: ArgumentList?>  ")" "=>" <body: Expression> => {
+        let args = match args {
+            Some(args) => args,
+            None => vec![],
+        };
+
+        Ast::FunctionDeclaration { id, body, args }
     }
 };
+
+ArgumentList: Vec<String> = {
+    <mut id_list: (Identifier ",")*>  <id: Identifier> ","? => {
+        let mut id_list: Vec<String> = id_list.drain(..).map(|x| x.0).collect();
+        id_list.push(id);
+        id_list
+    }
+}
 
 Identifier: String = {
     r"[_[:alpha:]][_[:alnum:]]*" => <>.to_string(),
 };
 
-ExpressionBlock: Ast = {
-    "{" "}" => Ast::None,
+IntegerLiteral: Expression = {
+    r"[[:digit:]]+" => Expression::IntegerLiteral { value: <>.parse().unwrap() },
 };
+
+Expression: Expression = {
+    TermExpression,
+};
+
+TermExpression: Expression = {
+    <left: TermExpression> <op: TermOperator> <right: FactorExpression> => Expression::Binary {
+        operator: op,
+        left: Box::new(left),
+        right: Box::new(right),
+    },
+    FactorExpression,
+};
+
+TermOperator: Operator = {
+    "+" => Operator::Plus,
+    "-" => Operator::Minus,
+}
+
+FactorExpression: Expression = {
+    <left: FactorExpression> <op: FactorOperator> <right: UnaryFactorExpression> => Expression::Binary {
+        operator: op,
+        left: Box::new(left),
+        right: Box::new(right),
+    },
+    UnaryFactorExpression,
+}
+
+FactorOperator: Operator = {
+    "*" => Operator::Mul,
+    "/" => Operator::Div,
+}
+
+UnaryFactorExpression: Expression = {
+    <op: UnaryFactorOperator> <expression: BlockExpression> => Expression::Unary {
+        operator: op,
+        expression: Box::new(expression),
+    },
+    BlockExpression,
+};
+
+UnaryFactorOperator: Operator = {
+    "-" => Operator::Minus,
+}
+
+BlockExpression: Expression = {
+    "{" <return_expression: Expression> "}" => Expression::Block { return_expression: Box::new(return_expression) },
+    NestedExpression,
+};
+
+NestedExpression: Expression = {
+    "(" <expr: Expression> ")" => expr,
+    LeafExpression,
+}
+
+LeafExpression: Expression = {
+  IntegerLiteral,
+  Identifier => Expression::Identifier { id: <> },
+}

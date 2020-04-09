@@ -1,7 +1,7 @@
 #[derive(Debug)]
 pub enum Ast {
     Module {
-        contents: Vec<Box<Ast>>,
+        contents: Vec<Ast>,
     },
     FunctionDeclaration {
         id: String,
@@ -18,6 +18,7 @@ pub enum Operator {
     Minus,
     Mul,
     Div,
+    Neg,
 }
 
 #[derive(Debug)]

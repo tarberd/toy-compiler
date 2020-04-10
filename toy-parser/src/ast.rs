@@ -6,7 +6,7 @@ pub enum Ast {
     FunctionDeclaration {
         id: String,
         body: Expression,
-        args: Vec<String>,
+        parameters: Vec<String>,
     },
     Expression(Expression),
     None,
@@ -35,10 +35,14 @@ pub enum Expression {
         left: Box<Expression>,
         right: Box<Expression>,
     },
+    Call {
+        id: String,
+        arguments: Vec<Expression>,
+    },
     IntegerLiteral {
         value: i32,
     },
     Identifier {
-        id: String
-    }
+        id: String,
+    },
 }

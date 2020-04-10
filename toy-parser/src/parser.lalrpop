@@ -7,17 +7,17 @@ pub Module: Ast = {
 };
 
 FunctionDeclaration: Ast = {
-    "fn" <id: Identifier> "(" <args: ArgumentList?>  ")" "=>" <body: Expression> => {
-        let args = match args {
-            Some(args) => args,
+    "fn" <id: Identifier> "(" <parameters: ParameterList?>  ")" "=>" <body: Expression> => {
+        let parameters = match parameters {
+            Some(parameters) => parameters,
             None => vec![],
         };
 
-        Ast::FunctionDeclaration { id, body, args }
+        Ast::FunctionDeclaration { id, body, parameters }
     }
 };
 
-ArgumentList: Vec<String> = {
+ParameterList: Vec<String> = {
     <mut id_list: (Identifier ",")*>  <id: Identifier> ","? => {
         let mut id_list: Vec<String> = id_list.drain(..).map(|x| x.0).collect();
         id_list.push(id);
@@ -79,8 +79,31 @@ UnaryFactorOperator: Operator = {
 
 BlockExpression: Expression = {
     "{" <return_expression: Expression> "}" => Expression::Block { return_expression: Box::new(return_expression) },
-    NestedExpression,
+    FunctionCallExpression,
 };
+
+FunctionCallExpression: Expression = {
+    <id: Identifier> "(" <args: ArgumentList?> ")" => {
+        let arguments = match args {
+            Some(args) => args,
+            None => vec![],
+        };
+
+        Expression::Call {
+            id,
+            arguments,
+        }
+    },
+    NestedExpression,
+}
+
+ArgumentList: Vec<Expression> = {
+    <mut expr_list: (Expression",")*>  <expr: Expression> ","? => {
+        let mut expr_list: Vec<Expression> = expr_list.drain(..).map(|x| x.0).collect();
+        expr_list.push(expr);
+        expr_list
+    }
+}
 
 NestedExpression: Expression = {
     "(" <expr: Expression> ")" => expr,
@@ -88,6 +111,6 @@ NestedExpression: Expression = {
 }
 
 LeafExpression: Expression = {
-  IntegerLiteral,
-  Identifier => Expression::Identifier { id: <> },
+    IntegerLiteral,
+    Identifier => Expression::Identifier { id: <> },
 }

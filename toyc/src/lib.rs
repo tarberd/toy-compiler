@@ -104,21 +104,20 @@ pub fn drive(config: Config) {
             code_model,
         );
 
-        let mut x: Vec<std::os::raw::c_char> = vec!['a', 'b', 'c', '\0']
-            .into_iter()
-            .map(|x| x as std::os::raw::c_char)
-            .collect();
-        let slice = x.as_mut_slice();
-        let ptr = slice.as_mut_ptr();
+        let mut object_name = String::from(config.file.file_name().unwrap().to_str().unwrap());
+        object_name.push_str(".o");
+
+        let object_name =
+            CString::new(object_name).unwrap();
 
         let codegen = llvm::target_machine::LLVMCodeGenFileType::LLVMObjectFile;
 
-        let err: *mut *mut std::os::raw::c_char = [].as_mut_ptr();
+        let err = std::ptr::null_mut();
 
         if let 1 = llvm::target_machine::LLVMTargetMachineEmitToFile(
             target_machine,
             llvm_module,
-            ptr,
+            object_name.as_ptr() as *mut std::os::raw::c_char,
             codegen,
             err,
         ) {
@@ -199,7 +198,10 @@ fn ast_to_llvm_module(
             let builder = unsafe { llvm::core::LLVMCreateBuilder() };
             unsafe {
                 llvm::core::LLVMPositionBuilderAtEnd(builder, function_block);
-                llvm::core::LLVMBuildRet(builder, const_expression_to_llvm_valueref(body, builder, symbol_table));
+                llvm::core::LLVMBuildRet(
+                    builder,
+                    const_expression_to_llvm_valueref(body, builder, symbol_table),
+                );
                 llvm::core::LLVMDisposeBuilder(builder);
             }
         }
@@ -276,12 +278,18 @@ fn const_expression_to_llvm_valueref(
         Expression::Block { return_expression } => {
             const_expression_to_llvm_valueref(return_expression, builder, symbol_table)
         }
-        Expression::Call {
-            id,
-            arguments,
-        } => unsafe {
-            let mut arguments: Vec<_> = arguments.iter().map(|arg| const_expression_to_llvm_valueref(arg, builder, symbol_table)).collect();
-            llvm::core::LLVMBuildCall(builder, symbol_table[id], arguments.as_mut_ptr(), arguments.len() as u32, CStr::from_bytes_with_nul_unchecked(b"call_tmp\0").as_ptr())
+        Expression::Call { id, arguments } => unsafe {
+            let mut arguments: Vec<_> = arguments
+                .iter()
+                .map(|arg| const_expression_to_llvm_valueref(arg, builder, symbol_table))
+                .collect();
+            llvm::core::LLVMBuildCall(
+                builder,
+                symbol_table[id],
+                arguments.as_mut_ptr(),
+                arguments.len() as u32,
+                CStr::from_bytes_with_nul_unchecked(b"call_tmp\0").as_ptr(),
+            )
         },
     }
 }

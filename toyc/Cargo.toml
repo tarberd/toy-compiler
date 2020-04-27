@@ -6,5 +6,5 @@ edition = "2018"
 
 [dependencies]
 toy-parser = { path = "../toy-parser" }
-llvm-sys = "90.0.0"
+llvm-sys = "100.0.0"
 structopt = "0.3.12"

@@ -1,9 +1,11 @@
 # toy-compiler
 
-## first-time users
+[![builds.sr.ht status](https://builds.sr.ht/~tarberd/toy-compiler/archlinux.yml.svg)](https://builds.sr.ht/~tarberd/toy-compiler/archlinux.yml?)
+
+## system dependencies
 
 - install LLVM
-  - on Arch, run: `<your-package-manager> -S llvm`.
+  - on Arch, run: `pacman -S llvm`.
 
 ## commands
 

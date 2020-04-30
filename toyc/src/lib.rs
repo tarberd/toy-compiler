@@ -15,6 +15,42 @@ pub struct Config {
     pub emit_ast: bool,
 }
 
+pub struct SymbolTable {
+    table_stack: Vec<HashMap<String, *mut llvm::LLVMValue>>,
+}
+
+impl SymbolTable {
+    fn new() -> Self {
+        SymbolTable {
+            table_stack: vec![HashMap::new()],
+        }
+    }
+
+    fn insert(&mut self, id: String, value: *mut llvm::LLVMValue) {
+        self.table_stack.last_mut().unwrap().insert(id, value);
+    }
+
+    fn push(&mut self) {
+        self.table_stack.push(HashMap::new());
+    }
+
+    fn pop(&mut self) {
+        self.table_stack.pop();
+    }
+}
+
+impl std::ops::Index<&String> for SymbolTable {
+    type Output = *mut llvm::LLVMValue;
+
+    fn index(&self, string: &String) -> &Self::Output {
+        self.table_stack
+            .iter()
+            .rev()
+            .find_map(|table| table.get(string))
+            .unwrap()
+    }
+}
+
 pub fn drive(config: Config) {
     use std::fs::File;
     use std::io::prelude::Read;
@@ -65,8 +101,7 @@ pub fn drive(config: Config) {
         llvm::core::LLVMModuleCreateWithName(c_module_name.as_ptr())
     };
 
-    let mut symbol_table: HashMap<String, *mut llvm::LLVMValue> = HashMap::new();
-    ast_to_llvm_module(&ast, llvm_module, &mut symbol_table);
+    ast_to_llvm_module(&ast, llvm_module, &mut SymbolTable::new());
 
     if config.emit_llvm_ir {
         let asm =
@@ -75,26 +110,26 @@ pub fn drive(config: Config) {
         println!("{}", asm.to_str().expect("c string error on output"));
     }
 
-    unsafe {
-        let target_triple = llvm::target_machine::LLVMGetDefaultTargetTriple();
-        let target_cpu = llvm::target_machine::LLVMGetHostCPUName();
-        let target_features = llvm::target_machine::LLVMGetHostCPUFeatures();
+    let target_triple = unsafe { llvm::target_machine::LLVMGetDefaultTargetTriple() };
+    let target_cpu = unsafe { llvm::target_machine::LLVMGetHostCPUName() };
+    let target_features = unsafe { llvm::target_machine::LLVMGetHostCPUFeatures() };
 
-        if let 1 = llvm::target::LLVM_InitializeNativeTarget() {
-            panic!("Failed to initialize llvm native target");
-        };
+    if let 1 = unsafe { llvm::target::LLVM_InitializeNativeTarget() } {
+        panic!("Failed to initialize llvm native target");
+    };
 
-        if let 1 = llvm::target::LLVM_InitializeNativeAsmPrinter() {
-            panic!("Failed to initialize llvm native target");
-        };
+    if let 1 = unsafe { llvm::target::LLVM_InitializeNativeAsmPrinter() } {
+        panic!("Failed to initialize llvm native target");
+    };
 
-        let llvm_target = llvm::target_machine::LLVMGetFirstTarget();
+    let llvm_target = unsafe { llvm::target_machine::LLVMGetFirstTarget() };
 
-        let opt_level = llvm::target_machine::LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault;
-        let reloc_mode = llvm::target_machine::LLVMRelocMode::LLVMRelocDefault;
-        let code_model = llvm::target_machine::LLVMCodeModel::LLVMCodeModelDefault;
+    let opt_level = llvm::target_machine::LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault;
+    let reloc_mode = llvm::target_machine::LLVMRelocMode::LLVMRelocDefault;
+    let code_model = llvm::target_machine::LLVMCodeModel::LLVMCodeModelDefault;
 
-        let target_machine = llvm::target_machine::LLVMCreateTargetMachine(
+    let target_machine = unsafe {
+        llvm::target_machine::LLVMCreateTargetMachine(
             llvm_target,
             target_triple,
             target_cpu,
@@ -102,39 +137,37 @@ pub fn drive(config: Config) {
             opt_level,
             reloc_mode,
             code_model,
-        );
+        )
+    };
 
-        let mut object_name = String::from(config.file.file_name().unwrap().to_str().unwrap());
-        object_name.push_str(".o");
+    let mut object_name = String::from(config.file.file_name().unwrap().to_str().unwrap());
+    object_name.push_str(".o");
 
-        let object_name =
-            CString::new(object_name).unwrap();
+    let object_name = CString::new(object_name).unwrap();
 
-        let codegen = llvm::target_machine::LLVMCodeGenFileType::LLVMObjectFile;
+    let codegen = llvm::target_machine::LLVMCodeGenFileType::LLVMObjectFile;
 
-        let err = std::ptr::null_mut();
+    let err = std::ptr::null_mut();
 
-        if let 1 = llvm::target_machine::LLVMTargetMachineEmitToFile(
+    if let 1 = unsafe {
+        llvm::target_machine::LLVMTargetMachineEmitToFile(
             target_machine,
             llvm_module,
             object_name.as_ptr() as *mut std::os::raw::c_char,
             codegen,
             err,
-        ) {
-            panic!("Failed to initialize llvm native target");
-        };
+        )
+    } {
+        unsafe { llvm::core::LLVMDisposeMessage(*err) };
+        panic!("Failed to initialize llvm native target");
     };
 
-    unsafe {
-        llvm::core::LLVMDisposeModule(llvm_module);
-    };
+    unsafe { llvm::target_machine::LLVMDisposeTargetMachine(target_machine) };
+
+    unsafe { llvm::core::LLVMDisposeModule(llvm_module) };
 }
 
-fn ast_to_llvm_module(
-    ast: &Ast,
-    module: *mut llvm::LLVMModule,
-    symbol_table: &mut HashMap<String, *mut llvm::LLVMValue>,
-) {
+fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule, symbol_table: &mut SymbolTable) {
     match ast {
         Ast::Module { contents } => {
             for content in contents {
@@ -165,27 +198,29 @@ fn ast_to_llvm_module(
 
             symbol_table.insert(id.clone(), function);
 
-            unsafe {
+            let function_params = unsafe {
                 let function_params = Vec::with_capacity(args.len());
 
                 let mut function_params = std::mem::ManuallyDrop::new(function_params);
 
                 llvm::core::LLVMGetParams(function, function_params.as_mut_ptr());
 
-                let function_params = Vec::from_raw_parts(
+                Vec::from_raw_parts(
                     function_params.as_mut_ptr(),
                     function_params.capacity(),
                     function_params.capacity(),
-                );
+                )
+            };
 
-                for (value, name) in function_params.iter().zip(args.iter()) {
-                    symbol_table.insert(name.clone(), *value);
+            symbol_table.push();
 
-                    let c_name = CString::new(name.as_str()).unwrap();
-                    let c_name_len = c_name.as_bytes().len();
+            for (value, name) in function_params.iter().zip(args.iter()) {
+                symbol_table.insert(name.clone(), *value);
 
-                    llvm::core::LLVMSetValueName2(*value, c_name.as_ptr(), c_name_len);
-                }
+                let c_name = CString::new(name.as_str()).unwrap();
+                let c_name_len = c_name.as_bytes().len();
+
+                unsafe { llvm::core::LLVMSetValueName2(*value, c_name.as_ptr(), c_name_len) }
             }
 
             let function_block = unsafe {
@@ -204,6 +239,8 @@ fn ast_to_llvm_module(
                 );
                 llvm::core::LLVMDisposeBuilder(builder);
             }
+
+            symbol_table.pop();
         }
         _ => (),
     };
@@ -212,7 +249,7 @@ fn ast_to_llvm_module(
 fn const_expression_to_llvm_valueref(
     expression: &Expression,
     builder: *mut llvm::LLVMBuilder,
-    symbol_table: &HashMap<String, *mut llvm::LLVMValue>,
+    symbol_table: &SymbolTable,
 ) -> *mut llvm::LLVMValue {
     match expression {
         Expression::IntegerLiteral { value } => unsafe {

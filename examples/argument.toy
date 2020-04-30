@@ -1,1 +1,5 @@
-fn main (argcount) => argcount * argcount
+fn x(y) => y + y
+
+fn mul(x, y) => x * y
+
+fn main (y) => mul(x(y), x(y) + y)

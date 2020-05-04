@@ -3,17 +3,33 @@ use crate::ast::*;
 grammar;
 
 pub Module: Ast = {
-    FunctionDeclaration* => Ast::Module { contents: <> },
+    Statement* => Ast::Module { contents: <> },
+};
+
+Statement: Ast = {
+    FunctionDefinition,
+    FunctionDeclaration,
 };
 
 FunctionDeclaration: Ast = {
+    "fn" <id: Identifier> "(" <parameters: ParameterList?> ")" ";" => {
+        let parameters = match parameters {
+            Some(parameters) => parameters,
+            None => vec![],
+        };
+
+        Ast::FunctionDeclaration { id, parameters }
+    },
+};
+
+FunctionDefinition: Ast = {
     "fn" <id: Identifier> "(" <parameters: ParameterList?>  ")" "=>" <body: Expression> => {
         let parameters = match parameters {
             Some(parameters) => parameters,
             None => vec![],
         };
 
-        Ast::FunctionDeclaration { id, body, parameters }
+        Ast::FunctionDefinition { id, parameters, body }
     }
 };
 

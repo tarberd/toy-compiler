@@ -5,8 +5,12 @@ pub enum Ast {
     },
     FunctionDeclaration {
         id: String,
-        body: Expression,
         parameters: Vec<String>,
+    },
+    FunctionDefinition {
+        id: String,
+        parameters: Vec<String>,
+        body: Expression,
     },
     Expression(Expression),
     None,

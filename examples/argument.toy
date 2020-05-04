@@ -1,4 +1,6 @@
-fn x(y) => y + y
+fn mul(x, y);
+
+fn x(y) => mul(y, y) + y
 
 fn mul(x, y) => x * y
 

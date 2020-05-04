@@ -26,6 +26,14 @@ impl SymbolTable {
         }
     }
 
+    fn contains_symbol(&self, id: &String) -> bool {
+        self.table_stack
+            .iter()
+            .rev()
+            .find_map(|table| Some(table.contains_key(id)))
+            .unwrap()
+    }
+
     fn insert(&mut self, id: String, value: *mut llvm::LLVMValue) {
         self.table_stack.last_mut().unwrap().insert(id, value);
     }
@@ -174,13 +182,9 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule, symbol_table: &m
                 ast_to_llvm_module(content, module, symbol_table);
             }
         }
-        Ast::FunctionDeclaration {
-            id,
-            body,
-            parameters: args,
-        } => {
+        Ast::FunctionDeclaration { id, parameters } => {
             let function_type = unsafe {
-                let mut parameter_types = vec![llvm::core::LLVMInt32Type(); args.len()];
+                let mut parameter_types = vec![llvm::core::LLVMInt32Type(); parameters.len()];
 
                 llvm::core::LLVMFunctionType(
                     llvm::core::LLVMInt32Type(),
@@ -197,9 +201,37 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule, symbol_table: &m
             };
 
             symbol_table.insert(id.clone(), function);
+        }
+        Ast::FunctionDefinition {
+            id,
+            parameters,
+            body,
+        } => {
+            let function = if !symbol_table.contains_symbol(id) {
+                let function_type = unsafe {
+                    let mut parameter_types = vec![llvm::core::LLVMInt32Type(); parameters.len()];
+
+                    llvm::core::LLVMFunctionType(
+                        llvm::core::LLVMInt32Type(),
+                        parameter_types.as_mut_ptr(),
+                        parameter_types.len() as std::os::raw::c_uint,
+                        0,
+                    )
+                };
+
+                unsafe {
+                    let c_name = CString::new(id.as_str()).unwrap();
+
+                    llvm::core::LLVMAddFunction(module, c_name.as_ptr(), function_type)
+                }
+            } else {
+                symbol_table[id]
+            };
+
+            symbol_table.insert(id.clone(), function);
 
             let function_params = unsafe {
-                let function_params = Vec::with_capacity(args.len());
+                let function_params = Vec::with_capacity(parameters.len());
 
                 let mut function_params = std::mem::ManuallyDrop::new(function_params);
 
@@ -214,7 +246,7 @@ fn ast_to_llvm_module(ast: &Ast, module: *mut llvm::LLVMModule, symbol_table: &m
 
             symbol_table.push();
 
-            for (value, name) in function_params.iter().zip(args.iter()) {
+            for (value, name) in function_params.iter().zip(parameters.iter()) {
                 symbol_table.insert(name.clone(), *value);
 
                 let c_name = CString::new(name.as_str()).unwrap();

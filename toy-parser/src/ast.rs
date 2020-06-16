@@ -12,6 +12,10 @@ pub enum Ast {
         parameters: Vec<String>,
         body: Expression,
     },
+    VariableDefinition {
+        id: String,
+        expression: Expression,
+    },
     Expression(Expression),
     None,
 }
@@ -28,6 +32,7 @@ pub enum Operator {
 #[derive(Debug)]
 pub enum Expression {
     Block {
+        statements: Vec<Ast>,
         return_expression: Box<Expression>,
     },
     Unary {

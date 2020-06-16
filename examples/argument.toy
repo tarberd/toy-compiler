@@ -1,7 +1,12 @@
 fn mul(x, y);
 
-fn x(y) => mul(y, y) + y
+fn x(y) => mul(y, y) + y;
 
-fn mul(x, y) => x * y
+fn mul(x, y) => x * y;
 
-fn main (y) => mul(x(y), x(y) + y)
+fn main (y) => {
+  let banana = 5;
+  let result = mul(banana, banana);
+
+  result
+};

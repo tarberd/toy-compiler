@@ -3,13 +3,19 @@ use crate::ast::*;
 grammar;
 
 pub Module: Ast = {
-    Statement* => Ast::Module { contents: <> },
+    StatementList => Ast::Module { contents: <> },
+};
+
+StatementList: Vec<Ast> = {
+    Statement* => <>,
 };
 
 Statement: Ast = {
-    FunctionDefinition,
     FunctionDeclaration,
+    FunctionDefinition,
+    VariableDefinition,
 };
+
 
 FunctionDeclaration: Ast = {
     "fn" <id: Identifier> "(" <parameters: ParameterList?> ")" ";" => {
@@ -23,14 +29,14 @@ FunctionDeclaration: Ast = {
 };
 
 FunctionDefinition: Ast = {
-    "fn" <id: Identifier> "(" <parameters: ParameterList?>  ")" "=>" <body: Expression> => {
+    "fn" <id: Identifier> "(" <parameters: ParameterList?>  ")" "=>" <body: Expression> ";" => {
         let parameters = match parameters {
             Some(parameters) => parameters,
             None => vec![],
         };
 
         Ast::FunctionDefinition { id, parameters, body }
-    }
+    },
 };
 
 ParameterList: Vec<String> = {
@@ -38,8 +44,14 @@ ParameterList: Vec<String> = {
         let mut id_list: Vec<String> = id_list.drain(..).map(|x| x.0).collect();
         id_list.push(id);
         id_list
-    }
-}
+    },
+};
+
+VariableDefinition: Ast = {
+    "let" <id: Identifier> "=" <expression: Expression> ";" => {
+        Ast::VariableDefinition { id, expression }
+    },
+};
 
 Identifier: String = {
     r"[_[:alpha:]][_[:alnum:]]*" => <>.to_string(),
@@ -65,7 +77,7 @@ TermExpression: Expression = {
 TermOperator: Operator = {
     "+" => Operator::Plus,
     "-" => Operator::Minus,
-}
+};
 
 FactorExpression: Expression = {
     <left: FactorExpression> <op: FactorOperator> <right: UnaryFactorExpression> => Expression::Binary {
@@ -74,12 +86,12 @@ FactorExpression: Expression = {
         right: Box::new(right),
     },
     UnaryFactorExpression,
-}
+};
 
 FactorOperator: Operator = {
     "*" => Operator::Mul,
     "/" => Operator::Div,
-}
+};
 
 UnaryFactorExpression: Expression = {
     <op: UnaryFactorOperator> <expression: BlockExpression> => Expression::Unary {
@@ -91,10 +103,15 @@ UnaryFactorExpression: Expression = {
 
 UnaryFactorOperator: Operator = {
     "-" => Operator::Neg,
-}
+};
 
 BlockExpression: Expression = {
-    "{" <return_expression: Expression> "}" => Expression::Block { return_expression: Box::new(return_expression) },
+    "{" <statement_list: StatementList> <return_expression: Expression> "}" => {
+        Expression::Block {
+            statements: statement_list,
+            return_expression: Box::new(return_expression),
+        }
+    },
     FunctionCallExpression,
 };
 
@@ -111,22 +128,22 @@ FunctionCallExpression: Expression = {
         }
     },
     NestedExpression,
-}
+};
 
 ArgumentList: Vec<Expression> = {
     <mut expr_list: (Expression",")*>  <expr: Expression> ","? => {
         let mut expr_list: Vec<Expression> = expr_list.drain(..).map(|x| x.0).collect();
         expr_list.push(expr);
         expr_list
-    }
-}
+    },
+};
 
 NestedExpression: Expression = {
     "(" <expr: Expression> ")" => expr,
     LeafExpression,
-}
+};
 
 LeafExpression: Expression = {
     IntegerLiteral,
     Identifier => Expression::Identifier { id: <> },
-}
+};

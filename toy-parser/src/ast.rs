@@ -10,13 +10,35 @@ pub enum Ast {
     FunctionDefinition {
         id: String,
         parameters: Vec<String>,
-        body: Expression,
+        body: Box<Ast>,
     },
     VariableDefinition {
         id: String,
-        expression: Expression,
+        expression: Box<Ast>,
     },
-    Expression(Expression),
+    BlockExpression {
+        statements: Vec<Ast>,
+        return_expression: Box<Ast>,
+    },
+    UnaryExpression {
+        operator: Operator,
+        expression: Box<Ast>,
+    },
+    BinaryExpression {
+        operator: Operator,
+        left: Box<Ast>,
+        right: Box<Ast>,
+    },
+    CallExpression {
+        id: String,
+        arguments: Vec<Ast>,
+    },
+    IntegerLiteral {
+        value: i32,
+    },
+    Identifier {
+        id: String,
+    },
     None,
 }
 
@@ -27,31 +49,5 @@ pub enum Operator {
     Mul,
     Div,
     Neg,
-}
-
-#[derive(Debug)]
-pub enum Expression {
-    Block {
-        statements: Vec<Ast>,
-        return_expression: Box<Expression>,
-    },
-    Unary {
-        operator: Operator,
-        expression: Box<Expression>,
-    },
-    Binary {
-        operator: Operator,
-        left: Box<Expression>,
-        right: Box<Expression>,
-    },
-    Call {
-        id: String,
-        arguments: Vec<Expression>,
-    },
-    IntegerLiteral {
-        value: i32,
-    },
-    Identifier {
-        id: String,
-    },
+    Deref,
 }

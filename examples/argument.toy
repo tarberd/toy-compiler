@@ -6,7 +6,7 @@ fn mul(x, y) => x * y;
 
 fn main (y) => {
   let banana = 5;
-  let result = mul(banana, banana);
+  let result = mul(&banana, banana);
 
   result
 };

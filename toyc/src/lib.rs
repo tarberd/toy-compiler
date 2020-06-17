@@ -1,7 +1,7 @@
 use llvm_sys as llvm;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
-use toy_parser::ast::{Ast, Expression, Operator};
+use toy_parser::ast::{Ast, Operator};
 
 #[derive(Debug, structopt::StructOpt)]
 pub struct Config {
@@ -283,7 +283,13 @@ fn ast_to_llvm_module(
                 llvm::core::LLVMPositionBuilderAtEnd(builder, function_block);
                 llvm::core::LLVMBuildRet(
                     builder,
-                    const_expression_to_llvm_valueref(body, module, builder, symbol_table),
+                    const_expression_to_llvm_valueref(
+                        body,
+                        module,
+                        builder,
+                        symbol_table,
+                        &mut Context::new(),
+                    ),
                 );
             };
 
@@ -298,8 +304,13 @@ fn ast_to_llvm_module(
 
             symbol_table.insert(id.clone(), l_value);
 
-            let r_value =
-                const_expression_to_llvm_valueref(expression, module, builder, symbol_table);
+            let r_value = const_expression_to_llvm_valueref(
+                expression,
+                module,
+                builder,
+                symbol_table,
+                &mut Context::new(),
+            );
 
             unsafe {
                 llvm::core::LLVMBuildStore(builder, r_value, l_value);
@@ -309,43 +320,77 @@ fn ast_to_llvm_module(
     };
 }
 
+struct Context {
+    is_deref_expression: bool,
+}
+
+impl Context {
+    pub fn new() -> Self {
+        Context {
+            is_deref_expression: false,
+        }
+    }
+}
+
 fn const_expression_to_llvm_valueref(
-    expression: &Expression,
+    expression: &Ast,
     module: *mut llvm::LLVMModule,
     builder: *mut llvm::LLVMBuilder,
     symbol_table: &mut SymbolTable,
+    context: &mut Context,
 ) -> *mut llvm::LLVMValue {
     match expression {
-        Expression::IntegerLiteral { value } => unsafe {
+        Ast::IntegerLiteral { value } => unsafe {
             llvm::core::LLVMConstInt(
                 llvm::core::LLVMInt32Type(),
                 *value as std::os::raw::c_ulonglong,
                 0 as std::os::raw::c_int,
             )
         },
-        Expression::Identifier { id } => unsafe {
-            match llvm::core::LLVMGetValueKind(symbol_table[id]) {
-                llvm::LLVMValueKind::LLVMArgumentValueKind => symbol_table[id],
-                _ => {
-                    let c_id = CString::new(id.as_str()).unwrap();
-                    llvm::core::LLVMBuildLoad(builder, symbol_table[id], c_id.as_ptr())
+        Ast::Identifier { id } => unsafe {
+            if context.is_deref_expression {
+                symbol_table[id]
+            } else {
+                match llvm::core::LLVMGetValueKind(symbol_table[id]) {
+                    llvm::LLVMValueKind::LLVMArgumentValueKind => symbol_table[id],
+                    _ => {
+                        let c_id = CString::new(id.as_str()).unwrap();
+                        llvm::core::LLVMBuildLoad(builder, symbol_table[id], c_id.as_ptr())
+                    }
                 }
             }
         },
-        Expression::Unary {
+        Ast::UnaryExpression {
             operator,
             expression,
         } => match operator {
             Operator::Neg => unsafe {
                 llvm::core::LLVMBuildNeg(
                     builder,
-                    const_expression_to_llvm_valueref(expression, module, builder, symbol_table),
+                    const_expression_to_llvm_valueref(
+                        expression,
+                        module,
+                        builder,
+                        symbol_table,
+                        context,
+                    ),
                     CStr::from_bytes_with_nul_unchecked(b"neg_tmp\0").as_ptr(),
                 )
             },
+            Operator::Deref => {
+                let mut context = Context::new();
+                context.is_deref_expression = true;
+                const_expression_to_llvm_valueref(
+                    expression,
+                    module,
+                    builder,
+                    symbol_table,
+                    &mut context,
+                )
+            }
             _ => panic!("{:?} is not a unary operator", operator),
         },
-        Expression::Binary {
+        Ast::BinaryExpression {
             operator,
             left,
             right,
@@ -353,50 +398,82 @@ fn const_expression_to_llvm_valueref(
             Operator::Plus => unsafe {
                 llvm::core::LLVMBuildAdd(
                     builder,
-                    const_expression_to_llvm_valueref(left, module, builder, symbol_table),
-                    const_expression_to_llvm_valueref(right, module, builder, symbol_table),
+                    const_expression_to_llvm_valueref(left, module, builder, symbol_table, context),
+                    const_expression_to_llvm_valueref(
+                        right,
+                        module,
+                        builder,
+                        symbol_table,
+                        context,
+                    ),
                     CStr::from_bytes_with_nul_unchecked(b"add_tmp\0").as_ptr(),
                 )
             },
             Operator::Minus => unsafe {
                 llvm::core::LLVMBuildSub(
                     builder,
-                    const_expression_to_llvm_valueref(left, module, builder, symbol_table),
-                    const_expression_to_llvm_valueref(right, module, builder, symbol_table),
+                    const_expression_to_llvm_valueref(left, module, builder, symbol_table, context),
+                    const_expression_to_llvm_valueref(
+                        right,
+                        module,
+                        builder,
+                        symbol_table,
+                        context,
+                    ),
                     CStr::from_bytes_with_nul_unchecked(b"sub_tmp\0").as_ptr(),
                 )
             },
             Operator::Mul => unsafe {
                 llvm::core::LLVMBuildMul(
                     builder,
-                    const_expression_to_llvm_valueref(left, module, builder, symbol_table),
-                    const_expression_to_llvm_valueref(right, module, builder, symbol_table),
+                    const_expression_to_llvm_valueref(left, module, builder, symbol_table, context),
+                    const_expression_to_llvm_valueref(
+                        right,
+                        module,
+                        builder,
+                        symbol_table,
+                        context,
+                    ),
                     CStr::from_bytes_with_nul_unchecked(b"mul_tmp\0").as_ptr(),
                 )
             },
             Operator::Div => unsafe {
                 llvm::core::LLVMBuildSDiv(
                     builder,
-                    const_expression_to_llvm_valueref(left, module, builder, symbol_table),
-                    const_expression_to_llvm_valueref(right, module, builder, symbol_table),
+                    const_expression_to_llvm_valueref(left, module, builder, symbol_table, context),
+                    const_expression_to_llvm_valueref(
+                        right,
+                        module,
+                        builder,
+                        symbol_table,
+                        context,
+                    ),
                     CStr::from_bytes_with_nul_unchecked(b"div_tmp\0").as_ptr(),
                 )
             },
             _ => panic!("{:?} is not a binary operator.", operator),
         },
-        Expression::Block {
+        Ast::BlockExpression {
             statements,
             return_expression,
         } => {
             for statement in statements {
                 ast_to_llvm_module(statement, module, builder, symbol_table);
             }
-            const_expression_to_llvm_valueref(return_expression, module, builder, symbol_table)
+            const_expression_to_llvm_valueref(
+                return_expression,
+                module,
+                builder,
+                symbol_table,
+                context,
+            )
         }
-        Expression::Call { id, arguments } => unsafe {
+        Ast::CallExpression { id, arguments } => unsafe {
             let mut arguments: Vec<_> = arguments
                 .iter()
-                .map(|arg| const_expression_to_llvm_valueref(arg, module, builder, symbol_table))
+                .map(|arg| {
+                    const_expression_to_llvm_valueref(arg, module, builder, symbol_table, context)
+                })
                 .collect();
             llvm::core::LLVMBuildCall(
                 builder,
@@ -406,5 +483,6 @@ fn const_expression_to_llvm_valueref(
                 CStr::from_bytes_with_nul_unchecked(b"call_tmp\0").as_ptr(),
             )
         },
+        _ => panic!(),
     }
 }

@@ -1,12 +1,10 @@
-fn mul(x, y);
+fn puts();
 
-fn x(y) => mul(y, y) + y;
+fn main() => {
+  let single_number: i32 = 6447714;
+  let reference: i32 = &single_number;
+  let multiple_numbers: [i32; 3] = [1819043176, 1870078063, 6581362, ];
 
-fn mul(x, y) => x * y;
-
-fn main (y) => {
-  let banana = 5;
-  let result = mul(&banana, banana);
-
+  let result: i32 = puts(multiple_numbers);
   result
 };

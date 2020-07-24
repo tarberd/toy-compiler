@@ -11,14 +11,13 @@ StatementList: Vec<Ast> = {
 };
 
 Statement: Ast = {
-    FunctionDeclaration,
-    FunctionDefinition,
-    VariableDefinition,
+    <s: FunctionDeclaration> ";" => s,
+    <s: FunctionDefinition> ";" => s,
+    <s: VariableDefinition> ";" => s,
 };
 
-
 FunctionDeclaration: Ast = {
-    "fn" <id: Identifier> "(" <parameters: ParameterList?> ")" ";" => {
+    "fn" <id: Identifier> "(" <parameters: ParameterList?> ")" => {
         let parameters = match parameters {
             Some(parameters) => parameters,
             None => vec![],
@@ -29,7 +28,7 @@ FunctionDeclaration: Ast = {
 };
 
 FunctionDefinition: Ast = {
-    "fn" <id: Identifier> "(" <parameters: ParameterList?>  ")" "=>" <body: Expression> ";" => {
+    "fn" <id: Identifier> "(" <parameters: ParameterList?>  ")" "=>" <body: Expression> => {
         let parameters = match parameters {
             Some(parameters) => parameters,
             None => vec![],
@@ -48,8 +47,27 @@ ParameterList: Vec<String> = {
 };
 
 VariableDefinition: Ast = {
-    "let" <id: Identifier> "=" <expression: Expression> ";" => {
-        Ast::VariableDefinition { id, expression: Box::new(expression) }
+    "let" <id: Identifier> ":" <type_id: Type> "=" <expression: Expression> => {
+        Ast::VariableDefinition { type_id, id, expression: Box::new(expression) }
+    },
+};
+
+Type: Type = {
+    "i32" => Type::I32,
+    PointerType,
+    ArrayType,
+};
+
+PointerType: Type = {
+    "*" <type_id: Type> => Type::Pointer { type_id: Box::new(type_id) },
+};
+
+ArrayType: Type = {
+    "[" <type_id: Type> ";" <size: Expression> "]" => {
+        Type::Array {
+            type_id: Box::new(type_id),
+            size: Box::new(size),
+        }
     },
 };
 
@@ -60,6 +78,10 @@ Identifier: String = {
 IntegerLiteral: Ast = {
     r"[[:digit:]]+" => Ast::IntegerLiteral { value: <>.parse().unwrap() },
 };
+
+ArrayLiteral: Ast = {
+    "[" <values: ExpressionList> "]" => Ast::ArrayLiteral { values },
+}
 
 Expression: Ast = {
     TermExpression,
@@ -117,12 +139,7 @@ BlockExpression: Ast = {
 };
 
 FunctionCallExpression: Ast = {
-    <id: Identifier> "(" <args: ArgumentList?> ")" => {
-        let arguments = match args {
-            Some(args) => args,
-            None => vec![],
-        };
-
+    <id: Identifier> "(" <arguments: ExpressionList> ")" => {
         Ast::CallExpression {
             id,
             arguments,
@@ -131,12 +148,13 @@ FunctionCallExpression: Ast = {
     NestedExpression,
 };
 
-ArgumentList: Vec<Ast> = {
-    <mut expr_list: (Expression",")*>  <expr: Expression> ","? => {
+ExpressionList: Vec<Ast> = {
+    <mut expr_list: (Expression ",")*>  <expr: Expression> ","? => {
         let mut expr_list: Vec<Ast> = expr_list.drain(..).map(|x| x.0).collect();
         expr_list.push(expr);
         expr_list
     },
+    () => vec![],
 };
 
 NestedExpression: Ast = {
@@ -145,6 +163,7 @@ NestedExpression: Ast = {
 };
 
 LeafExpression: Ast = {
+    ArrayLiteral,
     IntegerLiteral,
     Identifier => Ast::Identifier { id: <> },
 };

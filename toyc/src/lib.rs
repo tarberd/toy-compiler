@@ -1,7 +1,7 @@
 use llvm_sys as llvm;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
-use toy_parser::ast::{Ast, Operator};
+use toy_parser::ast::{Ast, Operator, Type};
 
 #[derive(Debug, structopt::StructOpt)]
 pub struct Config {
@@ -102,30 +102,6 @@ pub fn drive(config: Config) {
         println!("{:#?}", ast);
     }
 
-    let llvm_module = unsafe {
-        let c_module_name =
-            CString::new(config.file.file_name().unwrap().to_str().unwrap()).unwrap();
-
-        llvm::core::LLVMModuleCreateWithName(c_module_name.as_ptr())
-    };
-
-    let builder = unsafe { llvm::core::LLVMCreateBuilder() };
-    ast_to_llvm_module(&ast, llvm_module, builder, &mut SymbolTable::new());
-    unsafe {
-        llvm::core::LLVMDisposeBuilder(builder);
-    };
-
-    if config.emit_llvm_ir {
-        let asm =
-            unsafe { std::ffi::CStr::from_ptr(llvm::core::LLVMPrintModuleToString(llvm_module)) };
-
-        println!("{}", asm.to_str().expect("c string error on output"));
-    }
-
-    let target_triple = unsafe { llvm::target_machine::LLVMGetDefaultTargetTriple() };
-    let target_cpu = unsafe { llvm::target_machine::LLVMGetHostCPUName() };
-    let target_features = unsafe { llvm::target_machine::LLVMGetHostCPUFeatures() };
-
     if let 1 = unsafe { llvm::target::LLVM_InitializeNativeTarget() } {
         panic!("Failed to initialize llvm native target");
     };
@@ -133,6 +109,10 @@ pub fn drive(config: Config) {
     if let 1 = unsafe { llvm::target::LLVM_InitializeNativeAsmPrinter() } {
         panic!("Failed to initialize llvm native target");
     };
+
+    let target_triple = unsafe { llvm::target_machine::LLVMGetDefaultTargetTriple() };
+    let target_cpu = unsafe { llvm::target_machine::LLVMGetHostCPUName() };
+    let target_features = unsafe { llvm::target_machine::LLVMGetHostCPUFeatures() };
 
     let llvm_target = unsafe { llvm::target_machine::LLVMGetFirstTarget() };
 
@@ -151,6 +131,35 @@ pub fn drive(config: Config) {
             code_model,
         )
     };
+
+    let llvm_the_context = unsafe { llvm::core::LLVMContextCreate() };
+
+    let llvm_module = unsafe {
+        let c_module_name =
+            CString::new(config.file.file_name().unwrap().to_str().unwrap()).unwrap();
+
+        llvm::core::LLVMModuleCreateWithNameInContext(c_module_name.as_ptr(), llvm_the_context)
+    };
+
+    unsafe {
+        llvm::target::LLVMSetModuleDataLayout(
+            llvm_module,
+            llvm::target_machine::LLVMCreateTargetDataLayout(target_machine),
+        );
+    }
+
+    let builder = unsafe { llvm::core::LLVMCreateBuilder() };
+    ast_to_llvm_module(&ast, llvm_module, builder, &mut SymbolTable::new());
+    unsafe {
+        llvm::core::LLVMDisposeBuilder(builder);
+    };
+
+    if config.emit_llvm_ir {
+        let asm =
+            unsafe { std::ffi::CStr::from_ptr(llvm::core::LLVMPrintModuleToString(llvm_module)) };
+
+        println!("{}", asm.to_str().expect("c string error on output"));
+    }
 
     let mut object_name = String::from(config.file.file_name().unwrap().to_str().unwrap());
     object_name.push_str(".o");
@@ -190,6 +199,7 @@ fn ast_to_llvm_module(
             for content in {
                 contents.iter().filter(|x| match x {
                     Ast::VariableDefinition {
+                        type_id: _,
                         id: _,
                         expression: _,
                     } => false,
@@ -295,11 +305,59 @@ fn ast_to_llvm_module(
 
             symbol_table.pop();
         }
-        Ast::VariableDefinition { id, expression } => {
+        Ast::VariableDefinition {
+            type_id,
+            id,
+            expression,
+        } => {
             let c_id = CString::new(id.as_str()).unwrap();
 
-            let l_value = unsafe {
-                llvm::core::LLVMBuildAlloca(builder, llvm::core::LLVMInt32Type(), c_id.as_ptr())
+            let l_value = match type_id {
+                Type::I32 | Type::Pointer { type_id: _ } => unsafe {
+                    let llvm_val = llvm::core::LLVMBuildAlloca(
+                        builder,
+                        llvm::core::LLVMInt32Type(),
+                        c_id.as_ptr(),
+                    );
+                    llvm::core::LLVMSetAlignment(llvm_val, 4);
+                    llvm_val
+                },
+                Type::Array { type_id, size } => unsafe {
+                    let size = {
+                        let llvm_val = const_expression_to_llvm_valueref(
+                            size,
+                            module,
+                            builder,
+                            symbol_table,
+                            &mut Context::new(),
+                        );
+
+                        llvm::core::LLVMConstIntGetSExtValue(llvm_val)
+                    };
+
+                    let array_type = match type_id.as_ref() {
+                        Type::I32 => {
+                            llvm::core::LLVMArrayType(llvm::core::LLVMInt32Type(), size as u32)
+                        }
+                        other => panic!("Array of type: {:?} is not supported!", other),
+                    };
+
+                    let array_size = llvm::core::LLVMConstInt(
+                        llvm::core::LLVMInt32Type(),
+                        size as std::os::raw::c_ulonglong,
+                        0 as std::os::raw::c_int,
+                    );
+
+                    let llvm_alloca = llvm::core::LLVMBuildAlloca(
+                        builder,
+                        array_type,
+                        CStr::from_bytes_with_nul_unchecked(b"array_tmp\0").as_ptr(),
+                    );
+
+                    llvm::core::LLVMSetAlignment(llvm_alloca, 4);
+
+                    llvm_alloca
+                },
             };
 
             symbol_table.insert(id.clone(), l_value);
@@ -312,9 +370,25 @@ fn ast_to_llvm_module(
                 &mut Context::new(),
             );
 
-            unsafe {
-                llvm::core::LLVMBuildStore(builder, r_value, l_value);
-            };
+            match type_id {
+                Type::Array {
+                    type_id: _,
+                    size: _,
+                } => unsafe {
+                    let r_value_type = llvm::core::LLVMTypeOf(r_value);
+                    let r_value_type = llvm::core::LLVMGetElementType(r_value_type);
+                    let size = llvm::core::LLVMGetArrayLength(r_value_type);
+                    let array_size = llvm::core::LLVMConstInt(
+                        llvm::core::LLVMInt64Type(),
+                        (size * 4) as std::os::raw::c_ulonglong,
+                        0 as std::os::raw::c_int,
+                    );
+                    llvm::core::LLVMBuildMemCpy(builder, l_value, 4, r_value, 4, array_size);
+                },
+                _ => unsafe {
+                    llvm::core::LLVMBuildStore(builder, r_value, l_value);
+                },
+            }
         }
         _ => (),
     };
@@ -347,6 +421,59 @@ fn const_expression_to_llvm_valueref(
                 0 as std::os::raw::c_int,
             )
         },
+        Ast::ArrayLiteral { values } => unsafe {
+            let array_type =
+                llvm::core::LLVMArrayType(llvm::core::LLVMInt32Type(), values.len() as u32);
+
+            let array_size = llvm::core::LLVMConstInt(
+                llvm::core::LLVMInt32Type(),
+                values.len() as std::os::raw::c_ulonglong,
+                0 as std::os::raw::c_int,
+            );
+
+            let alloc_value = llvm::core::LLVMBuildAlloca(
+                builder,
+                array_type,
+                CStr::from_bytes_with_nul_unchecked(b"array_tmp\0").as_ptr(),
+            );
+
+            llvm::core::LLVMSetAlignment(alloc_value, 4);
+
+            for (index, value) in values.iter().enumerate() {
+                let llvm_value = const_expression_to_llvm_valueref(
+                    value,
+                    module,
+                    builder,
+                    symbol_table,
+                    context,
+                );
+
+                let mut indexes = [
+                    llvm::core::LLVMConstInt(
+                        llvm::core::LLVMInt64Type(),
+                        0,
+                        0,
+                    ),
+                    llvm::core::LLVMConstInt(
+                        llvm::core::LLVMInt64Type(),
+                        index as std::os::raw::c_ulonglong,
+                        0,
+                    ),
+                ];
+
+                let ptr = llvm::core::LLVMBuildInBoundsGEP(
+                    builder,
+                    alloc_value,
+                    indexes.as_mut_ptr(),
+                    indexes.len() as u32,
+                    CStr::from_bytes_with_nul_unchecked(b"gep_tmp\0").as_ptr(),
+                );
+                let store = llvm::core::LLVMBuildStore(builder, llvm_value, ptr);
+                llvm::core::LLVMSetAlignment(store, 4);
+            }
+
+            alloc_value
+        },
         Ast::Identifier { id } => unsafe {
             if context.is_deref_expression {
                 symbol_table[id]
@@ -354,8 +481,46 @@ fn const_expression_to_llvm_valueref(
                 match llvm::core::LLVMGetValueKind(symbol_table[id]) {
                     llvm::LLVMValueKind::LLVMArgumentValueKind => symbol_table[id],
                     _ => {
-                        let c_id = CString::new(id.as_str()).unwrap();
-                        llvm::core::LLVMBuildLoad(builder, symbol_table[id], c_id.as_ptr())
+                        match llvm::core::LLVMGetTypeKind(llvm::core::LLVMTypeOf(symbol_table[id]))
+                        {
+                            llvm::LLVMTypeKind::LLVMPointerTypeKind => {
+                                let llvm_value = symbol_table[id];
+
+                                let mut indexes = [llvm::core::LLVMConstInt(
+                                    llvm::core::LLVMInt32Type(),
+                                    0 as std::os::raw::c_ulonglong,
+                                    0,
+                                )];
+
+                                let llvm_value = llvm::core::LLVMBuildInBoundsGEP(
+                                    builder,
+                                    llvm_value,
+                                    indexes.as_mut_ptr(),
+                                    indexes.len() as u32,
+                                    CStr::from_bytes_with_nul_unchecked(b"gep_tmp\0").as_ptr(),
+                                );
+
+                                let det_type = llvm::core::LLVMPointerType(
+                                    llvm::core::LLVMInt8Type(),
+                                    llvm::core::LLVMGetPointerAddressSpace(llvm::core::LLVMTypeOf(
+                                        llvm_value,
+                                    )),
+                                );
+
+                                let llvm_value = llvm::core::LLVMBuildBitCast(
+                                    builder,
+                                    llvm_value,
+                                    det_type,
+                                    CStr::from_bytes_with_nul_unchecked(b"bit_cast_tmp\0").as_ptr(),
+                                );
+
+                                llvm_value
+                            }
+                            _ => {
+                                let c_id = CString::new(id.as_str()).unwrap();
+                                llvm::core::LLVMBuildLoad(builder, symbol_table[id], c_id.as_ptr())
+                            }
+                        }
                     }
                 }
             }

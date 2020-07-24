@@ -1,4 +1,11 @@
 #[derive(Debug)]
+pub enum Type {
+    I32,
+    Pointer { type_id: Box<Type> },
+    Array { type_id: Box<Type>, size: Box<Ast> },
+}
+
+#[derive(Debug)]
 pub enum Ast {
     Module {
         contents: Vec<Ast>,
@@ -13,6 +20,7 @@ pub enum Ast {
         body: Box<Ast>,
     },
     VariableDefinition {
+        type_id: Type,
         id: String,
         expression: Box<Ast>,
     },
@@ -33,8 +41,15 @@ pub enum Ast {
         id: String,
         arguments: Vec<Ast>,
     },
+    AccessExpression {
+        base: Box<Ast>,
+        offset: Box<Ast>,
+    },
     IntegerLiteral {
         value: i32,
+    },
+    ArrayLiteral {
+        values: Vec<Ast>,
     },
     Identifier {
         id: String,

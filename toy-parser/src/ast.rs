@@ -12,16 +12,16 @@ pub enum Ast {
     },
     FunctionDeclaration {
         id: String,
-        parameters: Vec<String>,
+        parameters: Vec<(String, Type)>,
     },
     FunctionDefinition {
         id: String,
-        parameters: Vec<String>,
+        parameters: Vec<(String, Type)>,
         body: Box<Ast>,
     },
     VariableDefinition {
-        type_id: Type,
         id: String,
+        type_id: Type,
         expression: Box<Ast>,
     },
     BlockExpression {

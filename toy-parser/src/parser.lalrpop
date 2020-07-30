@@ -38,12 +38,16 @@ FunctionDefinition: Ast = {
     },
 };
 
-ParameterList: Vec<String> = {
-    <mut id_list: (Identifier ",")*>  <id: Identifier> ","? => {
-        let mut id_list: Vec<String> = id_list.drain(..).map(|x| x.0).collect();
+ParameterList: Vec<(String, Type)> = {
+    <mut id_list: (Parameter ",")*>  <id: Parameter> ","? => {
+        let mut id_list: Vec<(String, Type)> = id_list.drain(..).map(|x| x.0).collect();
         id_list.push(id);
         id_list
     },
+};
+
+Parameter: (String, Type) = {
+    <id: Identifier> ":" <type_: Type> => (id, type_),
 };
 
 VariableDefinition: Ast = {

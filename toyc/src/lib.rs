@@ -98,6 +98,8 @@ pub fn drive(config: Config) {
 
     let ast = ModuleParser::new().parse(&file_buffer).unwrap();
 
+    println!("{:#?}", toy_parser::table::Table::from_ast(&ast));
+
     if config.emit_ast {
         println!("{:#?}", ast);
     }
@@ -273,7 +275,7 @@ fn ast_to_llvm_module(
 
             symbol_table.push();
 
-            for (value, name) in function_params.iter().zip(parameters.iter()) {
+            for (value, name) in function_params.iter().zip(parameters.iter().map(|x| x.0.clone())) {
                 symbol_table.insert(name.clone(), *value);
 
                 let c_name = CString::new(name.as_str()).unwrap();

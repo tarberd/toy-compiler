@@ -16,3 +16,4 @@ lalrpop_mod!(
 );
 
 pub mod ast;
+pub mod table;

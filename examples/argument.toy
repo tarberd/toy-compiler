@@ -1,5 +1,7 @@
 fn puts();
 
+fn double(my_int: i32) => my_int * my_int;
+
 fn main() => {
   let single_number: i32 = 6447714;
   let reference: i32 = &single_number;

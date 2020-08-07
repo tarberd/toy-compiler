@@ -2,57 +2,72 @@ use crate::ast::*;
 
 grammar;
 
-pub Module: Ast = {
-    StatementList => Ast::Module { contents: <> },
+pub Module: ModuleStatement = {
+    StatementList => {
+        ModuleStatement {
+            id: Identifier { value: "root".to_string() },
+            statements: <>,
+        }
+    },
 };
 
-StatementList: Vec<Ast> = {
+StatementList: Vec<Statement> = {
     Statement* => <>,
 };
 
-Statement: Ast = {
-    <s: FunctionDeclaration> ";" => s,
-    <s: FunctionDefinition> ";" => s,
-    <s: VariableDefinition> ";" => s,
+Statement: Statement = {
+    <s: ExternFunctionDeclaration> ";" => Statement::ExternFunctionDeclaration(Box::new(s)),
+    <s: FunctionDefinition> ";" => Statement::FunctionDefinition(Box::new(s)),
+    <s: VariableDefinition> ";" => Statement::VariableDefinition(Box::new(s)),
 };
 
-FunctionDeclaration: Ast = {
-    "fn" <id: Identifier> "(" <parameters: ParameterList?> ")" => {
+ExternFunctionDeclaration: ExternFunctionDeclarationStatement = {
+    "extern" "fn" <id: Identifier> "(" <parameters: ParameterList?> ")" <return_type: (":" Type)?> => {
         let parameters = match parameters {
             Some(parameters) => parameters,
             None => vec![],
         };
 
-        Ast::FunctionDeclaration { id, parameters }
+        let return_type = match return_type {
+            Some((_, type_)) => type_,
+            None => Type::Void,
+        };
+
+        ExternFunctionDeclarationStatement { id, parameters, return_type }
     },
 };
 
-FunctionDefinition: Ast = {
-    "fn" <id: Identifier> "(" <parameters: ParameterList?>  ")" "=>" <body: Expression> => {
+FunctionDefinition: FunctionDefinitionStatement = {
+    "fn" <id: Identifier> "(" <parameters: ParameterList?>  ")" <return_type: (":" Type)?> "=>" <body: Expression> => {
         let parameters = match parameters {
             Some(parameters) => parameters,
             None => vec![],
         };
 
-        Ast::FunctionDefinition { id, parameters, body: Box::new(body) }
+        let return_type = match return_type {
+            Some((_, type_)) => type_,
+            None => Type::Void,
+        };
+
+        FunctionDefinitionStatement { id, parameters, return_type, body }
     },
 };
 
-ParameterList: Vec<(String, Type)> = {
+ParameterList: Vec<(Identifier, Type)> = {
     <mut id_list: (Parameter ",")*>  <id: Parameter> ","? => {
-        let mut id_list: Vec<(String, Type)> = id_list.drain(..).map(|x| x.0).collect();
+        let mut id_list: Vec<(Identifier, Type)> = id_list.drain(..).map(|x| x.0).collect();
         id_list.push(id);
         id_list
     },
 };
 
-Parameter: (String, Type) = {
+Parameter: (Identifier, Type) = {
     <id: Identifier> ":" <type_: Type> => (id, type_),
 };
 
-VariableDefinition: Ast = {
-    "let" <id: Identifier> ":" <type_id: Type> "=" <expression: Expression> => {
-        Ast::VariableDefinition { type_id, id, expression: Box::new(expression) }
+VariableDefinition: VariableDefinitionStatement = {
+    "let" <id: Identifier> ":" <type_: Type> "=" <initialize_expression: Expression> => {
+        VariableDefinitionStatement { id, type_, initialize_expression }
     },
 };
 
@@ -75,99 +90,116 @@ ArrayType: Type = {
     },
 };
 
-Identifier: String = {
-    r"[_[:alpha:]][_[:alnum:]]*" => <>.to_string(),
+Identifier: Identifier = {
+    r"[_[:alpha:]][_[:alnum:]]*" => Identifier { value: <>.to_string() },
 };
 
-IntegerLiteral: Ast = {
-    r"[[:digit:]]+" => Ast::IntegerLiteral { value: <>.parse().unwrap() },
-};
 
-ArrayLiteral: Ast = {
-    "[" <values: ExpressionList> "]" => Ast::ArrayLiteral { values },
-}
-
-Expression: Ast = {
+Expression: Expression = {
     TermExpression,
 };
 
-TermExpression: Ast = {
-    <left: TermExpression> <op: TermOperator> <right: FactorExpression> => Ast::BinaryExpression {
-        operator: op,
-        left: Box::new(left),
-        right: Box::new(right),
+TermExpression: Expression = {
+    <left: TermExpression> <op: TermOperator> <right: FactorExpression> => {
+        let bi_op = BinaryExpression {
+            operator: op,
+            left: left,
+            right: right,
+        };
+
+        Expression::Binary(Box::new(bi_op))
     },
     FactorExpression,
 };
 
-TermOperator: Operator = {
-    "+" => Operator::Plus,
-    "-" => Operator::Minus,
+TermOperator: BinaryOperator = {
+    "+" => BinaryOperator::Plus,
+    "-" => BinaryOperator::Minus,
 };
 
-FactorExpression: Ast = {
-    <left: FactorExpression> <op: FactorOperator> <right: UnaryFactorExpression> => Ast::BinaryExpression {
-        operator: op,
-        left: Box::new(left),
-        right: Box::new(right),
+FactorExpression: Expression = {
+    <left: FactorExpression> <op: FactorOperator> <right: UnaryFactorExpression> => {
+        let bi_op = BinaryExpression {
+            operator: op,
+            left: left,
+            right: right,
+        };
+
+        Expression::Binary(Box::new(bi_op))
     },
     UnaryFactorExpression,
 };
 
-FactorOperator: Operator = {
-    "*" => Operator::Mul,
-    "/" => Operator::Div,
+FactorOperator: BinaryOperator = {
+    "*" => BinaryOperator::Multiplication,
+    "/" => BinaryOperator::Division,
 };
 
-UnaryFactorExpression: Ast = {
-    <op: UnaryFactorOperator> <expression: BlockExpression> => Ast::UnaryExpression {
-        operator: op,
-        expression: Box::new(expression),
+UnaryFactorExpression: Expression = {
+    <op: UnaryFactorOperator> <expression: BlockExpression> => {
+        let u_op = UnaryExpression {
+            operator: op,
+            expression: expression,
+        };
+
+        Expression::Unary(Box::new(u_op))
     },
     BlockExpression,
 };
 
-UnaryFactorOperator: Operator = {
-    "-" => Operator::Neg,
-    "&" => Operator::Deref,
+UnaryFactorOperator: UnaryOperator = {
+    "-" => UnaryOperator::Minus,
+    "&" => UnaryOperator::Deref,
 };
 
-BlockExpression: Ast = {
-    "{" <statement_list: StatementList> <return_expression: Expression> "}" => {
-        Ast::BlockExpression {
-            statements: statement_list,
-            return_expression: Box::new(return_expression),
-        }
+BlockExpression: Expression = {
+    "{" <statements: StatementList> <return_expression: Expression?> "}" => {
+        let block = BlockExpression {
+            statements,
+            return_expression,
+        };
+
+        Expression::Block(Box::new(block))
     },
     FunctionCallExpression,
 };
 
-FunctionCallExpression: Ast = {
-    <id: Identifier> "(" <arguments: ExpressionList> ")" => {
-        Ast::CallExpression {
-            id,
+FunctionCallExpression: Expression = {
+    <callee: NestedExpression> "(" <arguments: ExpressionList> ")" => {
+        let call = CallExpression {
+            callee,
             arguments,
-        }
+        };
+
+        Expression::Call(Box::new(call))
     },
     NestedExpression,
 };
 
-ExpressionList: Vec<Ast> = {
+ExpressionList: Vec<Expression> = {
     <mut expr_list: (Expression ",")*>  <expr: Expression> ","? => {
-        let mut expr_list: Vec<Ast> = expr_list.drain(..).map(|x| x.0).collect();
+        let mut expr_list: Vec<Expression> = expr_list.drain(..).map(|x| x.0).collect();
         expr_list.push(expr);
         expr_list
     },
     () => vec![],
 };
 
-NestedExpression: Ast = {
+NestedExpression: Expression = {
     "(" <expr: Expression> ")" => expr,
     LeafExpression,
 };
 
-LeafExpression: Ast = {
-    ArrayLiteral,
-    IntegerLiteral,
-    Identifier => Ast::Identifier { id: <> },
+LeafExpression: Expression = {
+    ArrayLiteral => Expression::Array(<>),
+    IntegerLiteral => Expression::Integer(<>),
+    Identifier => Expression::Identifier(<>),
 };
+
+IntegerLiteral: IntegerLiteral  = {
+    r"[[:digit:]]+" => IntegerLiteral { value: <>.parse().unwrap() },
+};
+
+ArrayLiteral: ArrayLiteral = {
+    "[" <initialize_expressions: ExpressionList> "]" => ArrayLiteral { initialize_expressions },
+}

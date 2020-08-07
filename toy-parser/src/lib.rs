@@ -16,4 +16,6 @@ lalrpop_mod!(
 );
 
 pub mod ast;
+pub mod visitor;
+pub mod typecheck;
 pub mod table;

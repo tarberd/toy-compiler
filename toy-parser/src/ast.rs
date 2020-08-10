@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Type {
     I8,
     U8,
@@ -13,8 +13,18 @@ pub enum Type {
     IntegerLiteral,
 
     Void,
-    Pointer { type_id: Box<Type> },
-    Array { type_id: Box<Type>, size: Expression },
+    Pointer {
+        type_id: Box<Type>,
+    },
+    Array {
+        type_id: Box<Type>,
+        size: Expression,
+    },
+
+    Function {
+        parameters: Vec<Type>,
+        return_type: Box<Type>,
+    },
 
     None,
 }
@@ -35,25 +45,41 @@ impl PartialEq for Type {
             (USize, USize) => true,
             (IntegerLiteral, IntegerLiteral) => true,
             (Void, Void) => true,
+            (
+                Pointer { type_id: type_self },
+                Pointer {
+                    type_id: type_other,
+                },
+            ) => type_self.eq(type_other),
+            (
+                Array {
+                    type_id: type_self,
+                    size: _,
+                },
+                Array {
+                    type_id: type_other,
+                    size: _,
+                },
+            ) => type_self.eq(type_other),
             _ => false,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ModuleStatement {
     pub id: Identifier,
     pub statements: Vec<Statement>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ExternFunctionDeclarationStatement {
     pub id: Identifier,
     pub parameters: Vec<(Identifier, Type)>,
     pub return_type: Type,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FunctionDefinitionStatement {
     pub id: Identifier,
     pub parameters: Vec<(Identifier, Type)>,
@@ -61,14 +87,14 @@ pub struct FunctionDefinitionStatement {
     pub body: Expression,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VariableDefinitionStatement {
     pub id: Identifier,
     pub type_: Type,
     pub initialize_expression: Expression,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Statement {
     Module(Box<ModuleStatement>),
     ExternFunctionDeclaration(Box<ExternFunctionDeclarationStatement>),
@@ -76,53 +102,59 @@ pub enum Statement {
     VariableDefinition(Box<VariableDefinitionStatement>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BlockExpression {
     pub statements: Vec<Statement>,
     pub return_expression: Option<Expression>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
     pub expression: Expression,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
     pub left: Expression,
     pub right: Expression,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CallExpression {
     pub callee: Expression,
     pub arguments: Vec<Expression>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AccessExpression {
     pub base: Expression,
     pub offset: Expression,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ArrayLiteral {
     pub initialize_expressions: Vec<Expression>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct IntegerLiteral {
     pub value: isize,
 }
 
-#[derive(Debug)]
+#[derive(Hash, PartialEq, Eq, Clone, Debug)]
 pub struct Identifier {
     pub value: String,
 }
 
-#[derive(Debug)]
+impl From<String> for Identifier {
+    fn from(string: String) -> Self {
+        Identifier { value: string }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum Expression {
     Block(Box<BlockExpression>),
     Unary(Box<UnaryExpression>),
@@ -208,4 +240,4 @@ pub enum Operator {
     Div,
     Neg,
     Deref,
- }
+}

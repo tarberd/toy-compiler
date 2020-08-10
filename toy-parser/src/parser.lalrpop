@@ -85,7 +85,7 @@ ArrayType: Type = {
     "[" <type_id: Type> ";" <size: Expression> "]" => {
         Type::Array {
             type_id: Box::new(type_id),
-            size: Box::new(size),
+            size,
         }
     },
 };

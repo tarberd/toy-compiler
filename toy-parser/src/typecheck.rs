@@ -1,18 +1,14 @@
 use crate::ast::*;
+use crate::environment_builder::{Environment, EnvironmentBuilder};
 use crate::visitor::{AstVisitor, Visitable};
 
-struct TypeChecker {
-}
+struct TypeChecker {}
 
-impl TypeChecker {
-    fn type_of(&self, _id: &Identifier) -> Type {
-        Type::I32
-    }
-}
+use std::rc::Rc;
 
-impl AstVisitor<(), Type> for TypeChecker {
+impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
     type Return = Type;
-    type Environment = ();
+    type Environment = Rc<Environment>;
 
     fn visit_module_statement(
         &mut self,
@@ -20,7 +16,7 @@ impl AstVisitor<(), Type> for TypeChecker {
         m: &ModuleStatement,
     ) -> Self::Return {
         for statement in &m.statements {
-            statement.accept(env, self);
+            statement.accept(Rc::clone(&env), self);
         }
         Type::None
     }
@@ -48,6 +44,11 @@ impl AstVisitor<(), Type> for TypeChecker {
         env: Self::Environment,
         function: &FunctionDefinitionStatement,
     ) -> Self::Return {
+        let mut env = Environment::put(env);
+        for (id, type_) in &function.parameters {
+            env.insert(id.clone(), type_.clone())
+        }
+        let env = Rc::new(env);
         let body_return_type = function.body.accept(env, self);
         if function.return_type != body_return_type {
             panic!(
@@ -63,7 +64,12 @@ impl AstVisitor<(), Type> for TypeChecker {
         env: Self::Environment,
         variable: &VariableDefinitionStatement,
     ) -> Self::Return {
-        variable.accept(env, self)
+        let init_expr_type = variable.initialize_expression.accept(env, self);
+        if variable.type_ != init_expr_type {
+            panic!("Inititalize expression for {:?} differs in type. Expected: {:?}, Found: {:?}.", variable.id, variable.type_, init_expr_type);
+        }
+
+        Type::None
     }
 
     fn visit_expression(
@@ -89,6 +95,19 @@ impl AstVisitor<(), Type> for TypeChecker {
         env: Self::Environment,
         block: &BlockExpression,
     ) -> Self::Return {
+
+        let mut env = Environment::put(env);
+
+        for statement in &block.statements {
+            env = statement.accept(env, &mut EnvironmentBuilder{});
+        }
+
+        let env = Rc::new(env);
+
+        for statement in &block.statements {
+            statement.accept(Rc::clone(&env), self);
+        }
+
         match &block.return_expression {
             Some(expr) => expr.accept(env, self),
             None => Type::Void,
@@ -109,7 +128,7 @@ impl AstVisitor<(), Type> for TypeChecker {
         binary: &BinaryExpression,
     ) -> Self::Return {
         match (
-            binary.left.accept(env, self),
+            binary.left.accept(Rc::clone(&env), self),
             binary.right.accept(env, self),
         ) {
             (left, right) => {
@@ -127,7 +146,22 @@ impl AstVisitor<(), Type> for TypeChecker {
         env: Self::Environment,
         call: &CallExpression,
     ) -> Self::Return {
-        call.callee.accept(env, self)
+
+        if let Type::Function {
+            parameters,
+            return_type,
+        } = call.callee.accept(Rc::clone(&env), self)
+        {
+            if !call.arguments
+                .iter()
+                .map(|argument| argument.accept(Rc::clone(&env), self))
+                .eq(parameters.iter().cloned()) {
+                    panic!("Function arguments type mismatch.");
+                }
+            *return_type
+        } else {
+            panic!("call expression on non function type");
+        }
     }
 
     fn visit_access_expression(
@@ -151,7 +185,7 @@ impl AstVisitor<(), Type> for TypeChecker {
         let expr_types: Vec<Type> = array
             .initialize_expressions
             .iter()
-            .map(|expression| expression.accept(env, self))
+            .map(|expression| expression.accept(Rc::clone(&env), self))
             .collect();
 
         match expr_types.first() {
@@ -183,7 +217,10 @@ impl AstVisitor<(), Type> for TypeChecker {
     }
 
     fn visit_identifier(&mut self, env: Self::Environment, id: &Identifier) -> Self::Return {
-        self.type_of(id)
+        match env.get(id) {
+            Some(type_) => type_.clone(),
+            None => panic!("Missing id: {:?}", id),
+        }
     }
 }
 
@@ -193,16 +230,28 @@ mod test {
     fn typecheck() {
         use crate::parser::ModuleParser;
         let code = "
-        fn sum(lhs: i32, rhs: i32): i32  => lhs + rhs;
-        fn square(lhs: i32, rhs: i32): i32 => { lhs * rhs };
+        fn noop_recursive() => noop_recursive();
+        fn noop_cross_first() => noop_cross_seccond();
+        fn noop_cross_seccond() => noop_cross_first();
+        fn pass_by(something: i32) : i32 => something;
+        fn sum(lhs: i32, rhs: i32) : i32 => lhs + pass_by(rhs);
+        fn sum_with_body(lhs: i32, rhs: i32) : i32 => {
+            let x :i32 = lhs;
+            let y :i32 = rhs + lhs - lhs *rhs;
+
+            sum(x, y - y + 50)
+        };
         ";
 
         let module = ModuleParser::new().parse(code).unwrap();
 
+        let mut env_builder = super::EnvironmentBuilder {};
         let mut type_checker = super::TypeChecker {};
 
         use super::AstVisitor;
 
-        type_checker.visit_module_statement((), &module);
+        let env = super::Environment::new();
+        let env = env_builder.visit_module_statement(env, &module);
+        type_checker.visit_module_statement(super::Rc::new(env), &module);
     }
 }

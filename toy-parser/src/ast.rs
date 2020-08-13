@@ -61,6 +61,16 @@ impl PartialEq for Type {
                     size: _,
                 },
             ) => type_self.eq(type_other),
+            (
+                Function {
+                    parameters,
+                    return_type,
+                },
+                Function {
+                    parameters: parameter_rhs,
+                    return_type: return_type_rhs,
+                },
+            ) => parameters == parameter_rhs && return_type.eq(return_type_rhs),
             _ => false,
         }
     }

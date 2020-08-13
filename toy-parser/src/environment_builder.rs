@@ -2,33 +2,45 @@ use crate::ast::*;
 use crate::visitor::{AstVisitor, Visitable};
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Debug)]
-struct Environment {
+pub struct Environment {
     table: HashMap<Identifier, Type>,
+    father: Option<Rc<Self>>,
 }
 
 impl Environment {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Environment {
             table: HashMap::new(),
+            father: None,
         }
     }
 
-    fn put(&self) -> Self {
-        todo!()
+    pub fn put(father: Rc<Self>) -> Self {
+        Environment {
+            table: HashMap::new(),
+            father: Some(father),
+        }
     }
 
-    fn insert(&mut self, id: Identifier, type_: Type) {
+    pub fn insert(&mut self, id: Identifier, type_: Type) {
         self.table.insert(id, type_);
     }
 
-    fn get(&self, id: &Identifier) -> Option<&Type> {
-        self.table.get(id)
+    pub fn get(&self, id: &Identifier) -> Option<&Type> {
+        match self.table.get(id) {
+            Some(t) => Some(t),
+            None => match &self.father {
+                Some(f) => f.get(id),
+                None => None,
+            },
+        }
     }
 }
 
-struct EnvironmentBuilder {}
+pub struct EnvironmentBuilder {}
 
 impl AstVisitor<Environment, Environment> for EnvironmentBuilder {
     type Return = Environment;
@@ -63,7 +75,19 @@ impl AstVisitor<Environment, Environment> for EnvironmentBuilder {
         env: Self::Environment,
         f: &ExternFunctionDeclarationStatement,
     ) -> Self::Return {
-        todo!()
+        let mut env = env;
+        env.insert(
+            f.id.clone(),
+            Type::Function {
+                parameters: f
+                    .parameters
+                    .iter()
+                    .map(|(_id, type_)| type_.clone())
+                    .collect(),
+                return_type: Box::new(f.return_type.clone()),
+            },
+        );
+        env
     }
 
     fn visit_function_definition_statement(
@@ -71,7 +95,19 @@ impl AstVisitor<Environment, Environment> for EnvironmentBuilder {
         env: Self::Environment,
         function: &FunctionDefinitionStatement,
     ) -> Self::Return {
-        todo!()
+        let mut env = env;
+        env.insert(
+            function.id.clone(),
+            Type::Function {
+                parameters: function
+                    .parameters
+                    .iter()
+                    .map(|(_id, type_)| type_.clone())
+                    .collect(),
+                return_type: Box::new(function.return_type.clone()),
+            },
+        );
+        env
     }
 
     fn visit_variable_definition_statement(
@@ -154,6 +190,14 @@ mod tests {
         use crate::parser::ModuleParser;
         let code = "
         let x : i32 = 5;
+
+        extern fn putc();
+
+        extern fn extern_sum(lhs: i32, rhs: i32) : i32;
+
+        fn nop() => {};
+
+        fn sum(lhs: i32, rhs: i32) => lhs + rhs;
         ";
 
         let module = ModuleParser::new().parse(code).unwrap();
@@ -164,6 +208,33 @@ mod tests {
 
         let env = env_builder.visit_module_statement(super::Environment::new(), &module);
 
-        assert_eq!(env.get(&Identifier::from("x".to_string())), Some(&Type::I32));
+        assert_eq!(
+            env.get(&Identifier::from("x".to_string())),
+            Some(&Type::I32)
+        );
+
+        assert_eq!(
+            env.get(&Identifier::from("nop".to_string())),
+            Some(&Type::Function {
+                parameters: vec![],
+                return_type: Box::new(Type::Void),
+            })
+        );
+
+        assert_eq!(
+            env.get(&Identifier::from("putc".to_string())),
+            Some(&Type::Function {
+                parameters: vec![],
+                return_type: Box::new(Type::Void),
+            })
+        );
+
+        assert_eq!(
+            env.get(&Identifier::from("extern_sum".to_string())),
+            Some(&Type::Function {
+                parameters: vec![Type::I32, Type::I32],
+                return_type: Box::new(Type::I32),
+            })
+        );
     }
 }

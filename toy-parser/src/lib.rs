@@ -19,4 +19,3 @@ pub mod ast;
 pub mod visitor;
 pub mod environment_builder;
 pub mod typecheck;
-pub mod table;

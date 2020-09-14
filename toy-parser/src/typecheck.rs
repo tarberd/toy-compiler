@@ -33,7 +33,7 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
 
     fn visit_extern_function_declaration_statement(
         &mut self,
-        env: Self::Environment,
+        _env: Self::Environment,
         _f: &ExternFunctionDeclarationStatement,
     ) -> Self::Return {
         Type::None
@@ -52,8 +52,11 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
         let body_return_type = function.body.accept(env, self);
         if function.return_type != body_return_type {
             panic!(
-                "Functintion body's type: {:?} differs from function return type: {:?}",
-                body_return_type, function.return_type
+                concat!(
+                    "In function named {}: expected return type {:?}",
+                    " differs from function's body return type {:?}"
+                ),
+                function.id.value, function.return_type, body_return_type,
             );
         }
         Type::None
@@ -66,7 +69,10 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
     ) -> Self::Return {
         let init_expr_type = variable.initialize_expression.accept(env, self);
         if variable.type_ != init_expr_type {
-            panic!("Inititalize expression for {:?} differs in type. Expected: {:?}, Found: {:?}.", variable.id, variable.type_, init_expr_type);
+            panic!(
+                "Inititalize expression for {:?} differs in type. Expected: {:?}, Found: {:?}.",
+                variable.id, variable.type_, init_expr_type
+            );
         }
 
         Type::None
@@ -86,6 +92,7 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
             Access(expr) => expr.accept(env, self),
             Array(expr) => expr.accept(env, self),
             Integer(expr) => expr.accept(env, self),
+            Boolean(expr) => expr.accept(env, self),
             Identifier(expr) => expr.accept(env, self),
         }
     }
@@ -95,11 +102,10 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
         env: Self::Environment,
         block: &BlockExpression,
     ) -> Self::Return {
-
         let mut env = Environment::put(env);
 
         for statement in &block.statements {
-            env = statement.accept(env, &mut EnvironmentBuilder{});
+            env = statement.accept(env, &mut EnvironmentBuilder {});
         }
 
         let env = Rc::new(env);
@@ -135,7 +141,10 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
                 if left == right {
                     right
                 } else {
-                    panic!("binary expression difers in type");
+                    panic!(
+                        "Binary expression differs in type. lhs: {:?} rhs: {:?}",
+                        left, right
+                    );
                 }
             }
         }
@@ -146,18 +155,19 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
         env: Self::Environment,
         call: &CallExpression,
     ) -> Self::Return {
-
         if let Type::Function {
             parameters,
             return_type,
         } = call.callee.accept(Rc::clone(&env), self)
         {
-            if !call.arguments
+            if !call
+                .arguments
                 .iter()
                 .map(|argument| argument.accept(Rc::clone(&env), self))
-                .eq(parameters.iter().cloned()) {
-                    panic!("Function arguments type mismatch.");
-                }
+                .eq(parameters.iter().cloned())
+            {
+                panic!("Function arguments type mismatch.");
+            }
             *return_type
         } else {
             panic!("call expression on non function type");
@@ -198,22 +208,32 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
 
                 Type::Array {
                     type_id: Box::new(nested_type.clone()),
-                    size: Expression::Integer(IntegerLiteral { value: 0 }),
+                    size: Expression::Integer(Box::new(IntegerLiteral {
+                        value: 0,
+                        type_: Type::IntegerLiteral,
+                    })),
                 }
             }
             None => Type::Array {
                 type_id: Box::new(Type::None),
-                size: Expression::Integer(IntegerLiteral { value: 0 }),
+                size: Expression::Integer(Box::new(IntegerLiteral {
+                    value: 0,
+                    type_: Type::IntegerLiteral,
+                })),
             },
         }
     }
 
     fn visit_integer_literal(
         &mut self,
-        env: Self::Environment,
-        _: &IntegerLiteral,
+        _env: Self::Environment,
+        literal: &IntegerLiteral,
     ) -> Self::Return {
-        Type::IntegerLiteral
+        literal.type_.clone()
+    }
+
+    fn visit_boolean_literal(&mut self, _env: Rc<Environment>, _boolean: &BooleanLiteral) -> Type {
+        Type::Boolean
     }
 
     fn visit_identifier(&mut self, env: Self::Environment, id: &Identifier) -> Self::Return {
@@ -230,6 +250,12 @@ mod test {
     fn typecheck() {
         use crate::parser::ModuleParser;
         let code = "
+        fn bool_fn(): bool => {
+            let is_valid: bool = true;
+
+            not is_valid
+        };
+        fn bool_fn2(): bool => false;
         fn noop_recursive() => noop_recursive();
         fn noop_cross_first() => noop_cross_seccond();
         fn noop_cross_seccond() => noop_cross_first();
@@ -239,7 +265,11 @@ mod test {
             let x :i32 = lhs;
             let y :i32 = rhs + lhs - lhs *rhs;
 
-            sum(x, y - y + 50)
+            sum(x, y - y + 5_000_i32)
+        };
+
+        fn and_(lhs: bool, rhs: bool): bool => {
+            lhs && rhs || rhs and lhs or not (rhs or lhs) or (!rhs && not lhs)
         };
         ";
 

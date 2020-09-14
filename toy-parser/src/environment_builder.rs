@@ -122,61 +122,64 @@ impl AstVisitor<Environment, Environment> for EnvironmentBuilder {
 
     fn visit_expression(
         &mut self,
-        env: Self::Environment,
-        expression: &Expression,
+        _env: Self::Environment,
+        _expression: &Expression,
     ) -> Self::Return {
         todo!()
     }
     fn visit_block_expression(
         &mut self,
-        env: Self::Environment,
-        block: &BlockExpression,
+        _env: Self::Environment,
+        _block: &BlockExpression,
     ) -> Self::Return {
         todo!()
     }
     fn visit_unary_expression(
         &mut self,
-        env: Self::Environment,
-        unary: &UnaryExpression,
+        _env: Self::Environment,
+        _unary: &UnaryExpression,
     ) -> Self::Return {
         todo!()
     }
     fn visit_binary_expression(
         &mut self,
-        env: Self::Environment,
-        binary: &BinaryExpression,
+        _env: Self::Environment,
+        _binary: &BinaryExpression,
     ) -> Self::Return {
         todo!()
     }
     fn visit_call_expression(
         &mut self,
-        env: Self::Environment,
-        call: &CallExpression,
+        _env: Self::Environment,
+        _call: &CallExpression,
     ) -> Self::Return {
         todo!()
     }
     fn visit_access_expression(
         &mut self,
-        env: Self::Environment,
-        access: &AccessExpression,
+        _env: Self::Environment,
+        _access: &AccessExpression,
     ) -> Self::Return {
         todo!()
     }
     fn visit_array_literal(
         &mut self,
-        env: Self::Environment,
-        array: &ArrayLiteral,
+        _env: Self::Environment,
+        _array: &ArrayLiteral,
     ) -> Self::Return {
         todo!()
     }
     fn visit_integer_literal(
         &mut self,
-        env: Self::Environment,
-        literal: &IntegerLiteral,
+        _env: Self::Environment,
+        _literal: &IntegerLiteral,
     ) -> Self::Return {
         todo!()
     }
-    fn visit_identifier(&mut self, env: Self::Environment, id: &Identifier) -> Self::Return {
+    fn visit_boolean_literal(&mut self, _env: Environment, _boolean: &BooleanLiteral) -> Environment {
+        todo!()
+    }
+    fn visit_identifier(&mut self, _env: Self::Environment, _id: &Identifier) -> Self::Return {
         todo!()
     }
 }

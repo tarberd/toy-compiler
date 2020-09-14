@@ -1,5 +1,7 @@
 #[derive(Clone, Debug)]
 pub enum Type {
+    Boolean,
+
     I8,
     U8,
     I16,
@@ -33,6 +35,7 @@ impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         use Type::*;
         match (self, other) {
+            (Boolean, Boolean) => true,
             (I8, I8) => true,
             (U8, U8) => true,
             (I16, I16) => true,
@@ -151,6 +154,12 @@ pub struct ArrayLiteral {
 #[derive(Clone, Debug)]
 pub struct IntegerLiteral {
     pub value: isize,
+    pub type_: Type,
+}
+
+#[derive(Clone, Debug)]
+pub struct BooleanLiteral {
+    pub value: bool,
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
@@ -172,82 +181,30 @@ pub enum Expression {
     Call(Box<CallExpression>),
     Access(Box<AccessExpression>),
     Array(ArrayLiteral),
-    Integer(IntegerLiteral),
+    Integer(Box<IntegerLiteral>),
+    Boolean(BooleanLiteral),
     Identifier(Identifier),
-}
-
-#[derive(Debug)]
-pub enum Ast {
-    Module {
-        contents: Vec<Ast>,
-    },
-    FunctionDeclaration {
-        id: Identifier,
-        parameters: Vec<(Identifier, Type)>,
-    },
-    FunctionDefinition {
-        id: String,
-        parameters: Vec<(Identifier, Type)>,
-        body: Box<Ast>,
-    },
-    VariableDefinition {
-        id: Identifier,
-        type_id: Type,
-        expression: Box<Ast>,
-    },
-    BlockExpression {
-        statements: Vec<Ast>,
-        return_expression: Box<Ast>,
-    },
-    UnaryExpression {
-        operator: Operator,
-        expression: Box<Ast>,
-    },
-    BinaryExpression {
-        operator: Operator,
-        left: Box<Ast>,
-        right: Box<Ast>,
-    },
-    CallExpression {
-        id: Identifier,
-        arguments: Vec<Ast>,
-    },
-    AccessExpression {
-        base: Box<Ast>,
-        offset: Box<Ast>,
-    },
-    IntegerLiteral {
-        value: i32,
-    },
-    ArrayLiteral {
-        values: Vec<Ast>,
-    },
-    Identifier {
-        id: Identifier,
-    },
-    None,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum UnaryOperator {
+    Not,
     Minus,
     Deref,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum BinaryOperator {
+    GreaterThan,
+    GreaterEqualThan,
+    Equal,
+    LessEqualThan,
+    LessThan,
+
+    And,
+    Or,
     Plus,
     Minus,
     Multiplication,
     Division,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Operator {
-    Plus,
-    Minus,
-    Mul,
-    Div,
-    Neg,
-    Deref,
 }

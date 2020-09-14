@@ -72,9 +72,27 @@ VariableDefinition: VariableDefinitionStatement = {
 };
 
 Type: Type = {
-    "i32" => Type::I32,
+    BooleanType,
+    IntegerType,
     PointerType,
     ArrayType,
+};
+
+IntegerType: Type = {
+    "i8" => Type::I8,
+    "i16" => Type::I16,
+    "i32" => Type::I32,
+    "i64" => Type::I64,
+    "isize" => Type::ISize,
+    "u8" => Type::U8,
+    "u16" => Type::U16,
+    "u32" => Type::U32,
+    "u64" => Type::U64,
+    "usize" => Type::USize,
+};
+
+BooleanType: Type = {
+    "bool" => Type::Boolean,
 };
 
 PointerType: Type = {
@@ -96,7 +114,50 @@ Identifier: Identifier = {
 
 
 Expression: Expression = {
+    BinaryBooleanExpression,
+};
+
+BinaryBooleanExpression: Expression = {
+    <left: BinaryBooleanExpression> <op: BinaryBooleanOperator> <right: UnaryBooleanExpression> => {
+        let bi_op = BinaryExpression {
+            operator: op,
+            left: left,
+            right: right,
+        };
+
+        Expression::Binary(Box::new(bi_op))
+    },
+    UnaryBooleanExpression,
+};
+
+BinaryBooleanOperator: BinaryOperator = {
+    "&&" => BinaryOperator::And,
+    "and" => BinaryOperator::And,
+    "||" => BinaryOperator::Or,
+    "or" => BinaryOperator::Or,
+
+    ">" => BinaryOperator::GreaterThan,
+    ">=" => BinaryOperator::GreaterEqualThan,
+    "==" => BinaryOperator::Equal,
+    "<=" => BinaryOperator::LessEqualThan,
+    "<" => BinaryOperator::LessThan,
+};
+
+UnaryBooleanExpression: Expression = {
+    <op: UnaryBooleanOperator> <expression: TermExpression> => {
+        let u_op = UnaryExpression {
+            operator: op,
+            expression: expression,
+        };
+
+        Expression::Unary(Box::new(u_op))
+    },
     TermExpression,
+};
+
+UnaryBooleanOperator: UnaryOperator = {
+    "!" => UnaryOperator::Not,
+    "not" => UnaryOperator::Not,
 };
 
 TermExpression: Expression = {
@@ -192,14 +253,36 @@ NestedExpression: Expression = {
 
 LeafExpression: Expression = {
     ArrayLiteral => Expression::Array(<>),
-    IntegerLiteral => Expression::Integer(<>),
+    IntegerLiteral => Expression::Integer(Box::new(<>)),
+    BooleanLiteral => Expression::Boolean(<>),
     Identifier => Expression::Identifier(<>),
 };
 
-IntegerLiteral: IntegerLiteral  = {
-    r"[[:digit:]]+" => IntegerLiteral { value: <>.parse().unwrap() },
+IntegerLiteral: IntegerLiteral = {
+    <value: r"([[:digit:]]+_*)+"> <suffix: IntegerType?> => {
+        let value = value.to_string().replace("_", "");
+        match suffix {
+            Some(suffix) => {
+                IntegerLiteral {
+                    value: value.parse().unwrap(),
+                    type_: suffix,
+                }
+            },
+            None => {
+                IntegerLiteral {
+                    value: value.parse().unwrap(),
+                    type_: Type::IntegerLiteral,
+                }
+            },
+        }
+    },
 };
+
+BooleanLiteral: BooleanLiteral = {
+    "true" => BooleanLiteral { value: true },
+    "false" => BooleanLiteral { value: false },
+}
 
 ArrayLiteral: ArrayLiteral = {
     "[" <initialize_expressions: ExpressionList> "]" => ArrayLiteral { initialize_expressions },
-}
+};

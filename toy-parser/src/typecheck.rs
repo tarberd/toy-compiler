@@ -103,20 +103,16 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
         env: Self::Environment,
         block: &BlockExpression,
     ) -> Self::Return {
-        let mut env = Environment::put(env);
+        let mut env = Rc::clone(&env);
 
         for statement in &block.statements {
-            env = statement.accept(env, &mut EnvironmentBuilder {});
-        }
-
-        let env = Rc::new(env);
-
-        for statement in &block.statements {
+            let env_not_rc = Environment::put(Rc::clone(&env));
+            env = Rc::new(Environment::put(Rc::new(statement.accept(env_not_rc, &mut EnvironmentBuilder {}))));
             statement.accept(Rc::clone(&env), self);
         }
 
         match &block.return_expression {
-            Some(expr) => expr.accept(env, self),
+            Some(expr) => expr.accept(Rc::clone(&env), self),
             None => Type::Void,
         }
     }

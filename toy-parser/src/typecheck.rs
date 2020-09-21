@@ -86,6 +86,7 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
         use Expression::*;
         match expression {
             Block(expr) => expr.accept(env, self),
+            If(expr) => expr.accept(env, self),
             Unary(expr) => expr.accept(env, self),
             Binary(expr) => expr.accept(env, self),
             Call(expr) => expr.accept(env, self),
@@ -242,6 +243,27 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
             None => panic!("Missing id: {:?}", id),
         }
     }
+
+    fn visit_if_expression(&mut self, env: Rc<Environment>, if_expression: &IfExpression) -> Type {
+        let condition_type = if_expression.condition.accept(Rc::clone(&env), self);
+
+        if condition_type != Type::Boolean {
+            panic!("if condiditon must be of bool type");
+        }
+
+        let (true_path, false_path) = (
+            if_expression.true_path.accept(Rc::clone(&env), self),
+            if_expression.false_path.accept(env, self),
+        );
+        if true_path != false_path {
+            panic!(
+                "if branches differs in type, true leads to {:?} while false leads to {:?}",
+                true_path, false_path
+            );
+        }
+
+        true_path
+    }
 }
 
 #[cfg(test)]
@@ -253,22 +275,26 @@ mod test {
         fn bool_fn(): bool => {
             let is_valid: bool = true;
 
-            not is_valid
+            if not is_valid {
+                true
+            } else {
+                bool_false()
+            }
         };
-        fn bool_fn2(): bool => false;
+        fn bool_false(): bool => false;
         fn noop_recursive() => noop_recursive();
         fn noop_cross_first() => noop_cross_seccond();
         fn noop_cross_seccond() => noop_cross_first();
-        fn pass_by(something: i32) : i32 => something;
-        fn sum(lhs: i32, rhs: i32) : i32 => lhs + pass_by(rhs);
-        fn sum_with_body(lhs: i32, rhs: i32) : i32 => {
+        fn pass_by(something: i32): i32 => something;
+        fn sum(lhs: i32, rhs: i32): i32 => lhs + pass_by(rhs);
+        fn sum_with_body(lhs: i32, rhs: i32): i32 => {
             let x :i32 = lhs;
             let y :i32 = rhs + lhs - lhs *rhs;
 
             sum(x, y - y + 5_000_i32)
         };
 
-        fn and_(lhs: bool, rhs: bool): bool => {
+        fn _and_(lhs: bool, rhs: bool): bool => {
             lhs && rhs || rhs and lhs or not (rhs or lhs) or (!rhs && not lhs)
         };
         ";

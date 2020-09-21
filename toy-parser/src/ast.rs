@@ -135,6 +135,13 @@ pub struct BinaryExpression {
 }
 
 #[derive(Clone, Debug)]
+pub struct IfExpression {
+    pub condition: Expression,
+    pub true_path: Expression,
+    pub false_path: Expression,
+}
+
+#[derive(Clone, Debug)]
 pub struct CallExpression {
     pub callee: Expression,
     pub arguments: Vec<Expression>,
@@ -178,6 +185,7 @@ pub enum Expression {
     Block(Box<BlockExpression>),
     Unary(Box<UnaryExpression>),
     Binary(Box<BinaryExpression>),
+    If(Box<IfExpression>),
     Call(Box<CallExpression>),
     Access(Box<AccessExpression>),
     Array(ArrayLiteral),

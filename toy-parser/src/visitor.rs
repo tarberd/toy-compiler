@@ -24,6 +24,7 @@ pub trait AstVisitor<Environment, Return> {
 
     fn visit_expression(&mut self, env: Environment, expression: &Expression) -> Return;
     fn visit_block_expression(&mut self, env: Environment, block: &BlockExpression) -> Return;
+    fn visit_if_expression(&mut self, env: Environment, if_expression: &IfExpression) -> Return;
     fn visit_unary_expression(&mut self, env: Environment, unary: &UnaryExpression) -> Return;
     fn visit_binary_expression(&mut self, env: Environment, binary: &BinaryExpression) -> Return;
     fn visit_call_expression(&mut self, env: Environment, call: &CallExpression) -> Return;
@@ -92,6 +93,14 @@ impl<V: AstVisitor<Environment, Return>, Environment, Return> Visitable<V, Envir
 {
     fn accept(&self, env: Environment, visitor: &mut V) -> Return {
         visitor.visit_block_expression(env, self)
+    }
+}
+
+impl<V: AstVisitor<Environment, Return>, Environment, Return> Visitable<V, Environment, Return>
+    for IfExpression
+{
+    fn accept(&self, env: Environment, visitor: &mut V) -> Return {
+        visitor.visit_if_expression(env, self)
     }
 }
 

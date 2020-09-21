@@ -182,6 +182,10 @@ impl AstVisitor<Environment, Environment> for EnvironmentBuilder {
     fn visit_identifier(&mut self, _env: Self::Environment, _id: &Identifier) -> Self::Return {
         todo!()
     }
+
+    fn visit_if_expression(&mut self, _env: Environment, _if_expression: &IfExpression) -> Environment {
+        todo!()
+    }
 }
 
 #[cfg(test)]

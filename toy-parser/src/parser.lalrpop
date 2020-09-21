@@ -206,6 +206,9 @@ UnaryFactorExpression: Expression = {
         Expression::Unary(Box::new(u_op))
     },
     BlockExpression,
+    FunctionCallExpression,
+    IfExpression,
+    NestedExpression,
 };
 
 UnaryFactorOperator: UnaryOperator = {
@@ -222,7 +225,6 @@ BlockExpression: Expression = {
 
         Expression::Block(Box::new(block))
     },
-    FunctionCallExpression,
 };
 
 FunctionCallExpression: Expression = {
@@ -234,7 +236,16 @@ FunctionCallExpression: Expression = {
 
         Expression::Call(Box::new(call))
     },
-    NestedExpression,
+};
+
+IfExpression: Expression = {
+    "if" <condition: Expression> <true_path: BlockExpression> "else" <false_path: BlockExpression> => {
+        Expression::If(Box::new(IfExpression {
+            condition,
+            true_path,
+            false_path,
+        }))
+    },
 };
 
 ExpressionList: Vec<Expression> = {

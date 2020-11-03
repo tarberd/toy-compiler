@@ -108,11 +108,17 @@ pub struct VariableDefinitionStatement {
 }
 
 #[derive(Clone, Debug)]
+pub struct ReturnStatement {
+    pub expression: Expression,
+}
+
+#[derive(Clone, Debug)]
 pub enum Statement {
     Module(Box<ModuleStatement>),
     ExternFunctionDeclaration(Box<ExternFunctionDeclarationStatement>),
     FunctionDefinition(Box<FunctionDefinitionStatement>),
     VariableDefinition(Box<VariableDefinitionStatement>),
+    Return(Box<ReturnStatement>),
 }
 
 #[derive(Clone, Debug)]

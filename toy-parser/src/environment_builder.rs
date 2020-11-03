@@ -53,6 +53,7 @@ impl AstVisitor<Environment, Environment> for EnvironmentBuilder {
             ExternFunctionDeclaration(s) => s.accept(env, self),
             FunctionDefinition(s) => s.accept(env, self),
             VariableDefinition(s) => s.accept(env, self),
+            Return(s) => s.accept(env, self),
         }
     }
 
@@ -117,6 +118,10 @@ impl AstVisitor<Environment, Environment> for EnvironmentBuilder {
     ) -> Self::Return {
         let mut env = env;
         env.insert(variable.id.clone(), variable.type_.clone());
+        env
+    }
+
+    fn visit_return_statement(&mut self, env: Environment, return_statement: &ReturnStatement) -> Self::Return {
         env
     }
 

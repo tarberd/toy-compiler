@@ -28,6 +28,7 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
             ExternFunctionDeclaration(s) => s.accept(env, self),
             FunctionDefinition(s) => s.accept(env, self),
             VariableDefinition(s) => s.accept(env, self),
+            Return(s) => s.accept(env, self),
         }
     }
 
@@ -48,6 +49,12 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
         for (id, type_) in &function.parameters {
             env.insert(id.clone(), type_.clone())
         }
+        env.insert(
+            Identifier {
+                value: String::from("expected_return_type"),
+            },
+            function.return_type.clone(),
+        );
         let env = Rc::new(env);
         let body_return_type = function.body.accept(env, self);
         if function.return_type != body_return_type {
@@ -78,6 +85,29 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
         Type::None
     }
 
+    fn visit_return_statement(
+        &mut self,
+        env: Self::Environment,
+        return_statement: &ReturnStatement,
+    ) -> Self::Return {
+        let return_type = return_statement.expression.accept(Rc::clone(&env), self);
+
+        if let Some(function_return_type) = env.get(&Identifier {
+            value: String::from("expected_return_type"),
+        }) {
+            if function_return_type == &return_type {
+                Type::None
+            } else {
+                panic!(
+                    "return statement differs in type, expected: {:?}, found: {:?}.",
+                    function_return_type, return_type
+                );
+            }
+        } else {
+            panic!("return statement is not inside a function");
+        }
+    }
+
     fn visit_expression(
         &mut self,
         env: Self::Environment,
@@ -106,9 +136,18 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
         let mut env = Rc::clone(&env);
 
         for statement in &block.statements {
-            let env_not_rc = Environment::put(Rc::clone(&env));
-            env = Rc::new(Environment::put(Rc::new(statement.accept(env_not_rc, &mut EnvironmentBuilder {}))));
-            statement.accept(Rc::clone(&env), self);
+            match statement {
+                Statement::FunctionDefinition(_) => {
+                    panic!("Function definition inside block is not allowed");
+                }
+                _ => {
+                    let env_not_rc = Environment::put(Rc::clone(&env));
+                    env = Rc::new(Environment::put(Rc::new(
+                        statement.accept(env_not_rc, &mut EnvironmentBuilder {}),
+                    )));
+                    statement.accept(Rc::clone(&env), self);
+                }
+            }
         }
 
         match &block.return_expression {
@@ -264,9 +303,15 @@ impl AstVisitor<Rc<Environment>, Type> for TypeChecker {
 
 #[cfg(test)]
 mod test {
+    use super::AstVisitor;
+    use super::Environment;
+    use super::EnvironmentBuilder;
+    use super::Rc;
+    use super::TypeChecker;
+    use crate::parser::ModuleParser;
+
     #[test]
     fn typecheck() {
-        use crate::parser::ModuleParser;
         let code = "
         fn bool_fn(): bool => {
             let is_valid: bool = true;
@@ -286,7 +331,6 @@ mod test {
         fn sum_with_body(lhs: i32, rhs: i32): i32 => {
             let x :i32 = lhs;
             let y :i32 = rhs + lhs - lhs *rhs;
-
             sum(x, y - y + 5_000_i32)
         };
 
@@ -297,13 +341,102 @@ mod test {
 
         let module = ModuleParser::new().parse(code).unwrap();
 
+        let mut env_builder = EnvironmentBuilder {};
+        let mut type_checker = TypeChecker {};
+
+        let env = Environment::new();
+        let env = env_builder.visit_module_statement(env, &module);
+        type_checker.visit_module_statement(Rc::new(env), &module);
+    }
+
+    #[test]
+    #[should_panic(expected = "return statement is not inside a function")]
+    fn return_as_module_statement() {
+        use crate::parser::ModuleParser;
+        let code = "
+        let x: i32 = 5_i32;
+        return x;
+        ";
+
+        let module = ModuleParser::new().parse(code).unwrap();
+
         let mut env_builder = super::EnvironmentBuilder {};
         let mut type_checker = super::TypeChecker {};
 
-        use super::AstVisitor;
-
-        let env = super::Environment::new();
+        let env = Environment::new();
         let env = env_builder.visit_module_statement(env, &module);
-        type_checker.visit_module_statement(super::Rc::new(env), &module);
+        type_checker.visit_module_statement(Rc::new(env), &module);
+    }
+
+    #[test]
+    #[should_panic(expected = "return statement is not inside a function")]
+    fn return_as_module_statement_with_function() {
+        use crate::parser::ModuleParser;
+        let code = "
+        fn foo(): i32 => 5_i32;
+        return foo() + foo2();
+        fn foo2(): i32 => 5_i32;
+        ";
+
+        let module = ModuleParser::new().parse(code).unwrap();
+
+        let mut env_builder = super::EnvironmentBuilder {};
+        let mut type_checker = super::TypeChecker {};
+
+        let env = Environment::new();
+        let env = env_builder.visit_module_statement(env, &module);
+        type_checker.visit_module_statement(Rc::new(env), &module);
+    }
+
+    #[test]
+    #[should_panic(expected = "return statement differs in type, expected: I32, found: Boolean.")]
+    fn return_inside_function_differs_in_type() {
+        use crate::parser::ModuleParser;
+        let code = "
+        fn foo(): i32 => {
+            if true {
+                return 5_i32;
+            } else {
+                return true;
+            }
+        };
+        ";
+
+        let module = ModuleParser::new().parse(code).unwrap();
+
+        let mut env_builder = super::EnvironmentBuilder {};
+        let mut type_checker = super::TypeChecker {};
+
+        let env = Environment::new();
+        let env = env_builder.visit_module_statement(env, &module);
+        type_checker.visit_module_statement(Rc::new(env), &module);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Function definition inside block is not allowed"
+    )]
+    fn function_def_inside_block() {
+        use crate::parser::ModuleParser;
+        let code = "
+        fn foo(): i32 => {
+            fn goo(): i64 => 5_i64;
+            let x: i32 = 5_i32;
+            if true {
+                return 5_i32;
+            } else {
+                return 5_i32;
+            }
+        };
+        ";
+
+        let module = ModuleParser::new().parse(code).unwrap();
+
+        let mut env_builder = super::EnvironmentBuilder {};
+        let mut type_checker = super::TypeChecker {};
+
+        let env = Environment::new();
+        let env = env_builder.visit_module_statement(env, &module);
+        type_checker.visit_module_statement(Rc::new(env), &module);
     }
 }

@@ -21,6 +21,11 @@ pub trait AstVisitor<Environment, Return> {
         env: Environment,
         variable: &VariableDefinitionStatement,
     ) -> Return;
+    fn visit_return_statement(
+        &mut self,
+        env: Environment,
+        return_statement: &ReturnStatement,
+    ) -> Return;
 
     fn visit_expression(&mut self, env: Environment, expression: &Expression) -> Return;
     fn visit_block_expression(&mut self, env: Environment, block: &BlockExpression) -> Return;
@@ -77,6 +82,14 @@ impl<V: AstVisitor<Environment, Return>, Environment, Return> Visitable<V, Envir
 {
     fn accept(&self, env: Environment, visitor: &mut V) -> Return {
         visitor.visit_variable_definition_statement(env, self)
+    }
+}
+
+impl<V: AstVisitor<Environment, Return>, Environment, Return> Visitable<V, Environment, Return>
+    for ReturnStatement
+{
+    fn accept(&self, env: Environment, visitor: &mut V) -> Return {
+        visitor.visit_return_statement(env, self)
     }
 }
 

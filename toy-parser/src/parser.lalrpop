@@ -19,6 +19,7 @@ Statement: Statement = {
     <s: ExternFunctionDeclaration> ";" => Statement::ExternFunctionDeclaration(Box::new(s)),
     <s: FunctionDefinition> ";" => Statement::FunctionDefinition(Box::new(s)),
     <s: VariableDefinition> ";" => Statement::VariableDefinition(Box::new(s)),
+    <s: Return> ";" => Statement::Return(Box::new(s)),
 };
 
 ExternFunctionDeclaration: ExternFunctionDeclarationStatement = {
@@ -68,6 +69,14 @@ Parameter: (Identifier, Type) = {
 VariableDefinition: VariableDefinitionStatement = {
     "let" <id: Identifier> ":" <type_: Type> "=" <initialize_expression: Expression> => {
         VariableDefinitionStatement { id, type_, initialize_expression }
+    },
+};
+
+Return: ReturnStatement = {
+    "return" <e: Expression> => {
+        ReturnStatement {
+            expression: e,
+        }
     },
 };
 

@@ -2,6 +2,120 @@ use crate::ast::*;
 use crate::environment_builder::{Environment, EnvironmentBuilder};
 use crate::visitor::{AstVisitor, Visitable};
 
+#[derive(Debug)]
+pub enum TypedStatement {
+    Module(Module),
+    None,
+}
+
+#[derive(Debug)]
+pub struct Module {
+    pub id: Identifier,
+    pub functions: Vec<Function>,
+}
+
+#[derive(Debug)]
+pub struct Function {
+    pub id: Identifier,
+    pub parameters: Vec<(Identifier, Type)>,
+    pub return_type: Type,
+    pub body: TypedExpression,
+}
+
+#[derive(Debug)]
+pub enum TypedExpression {
+    Block(Box<Block>),
+    None,
+}
+
+#[derive(Debug)]
+pub struct Block {
+    pub return_expression: TypedExpression,
+    pub type_: Type,
+}
+
+
+
+pub fn typecheck_root_module(root_module: ModuleStatement) -> Module {
+    let mut env_builder = EnvironmentBuilder {};
+    let env = Environment::new();
+    let env = env_builder.visit_module_statement(env, &root_module);
+
+    typecheck_module(root_module, Rc::new(env))
+}
+
+pub fn typecheck_module(module: ModuleStatement, env: Rc<Environment>) -> Module {
+    // let statements = module
+    //     .statements
+    //     .into_iter()
+    //     .map(|statement| typecheck_statement(statement, Rc::clone(&env)))
+    //     .collect();
+    //
+    let mut functions = vec![];
+
+    for statement in module.statements {
+        match statement {
+            Statement::Module(m) => todo!(),
+            Statement::ExternFunctionDeclaration(_) => todo!(),
+            Statement::FunctionDefinition(function) => {
+                functions.push(Function {
+                    id: function.id,
+                    parameters: function.parameters,
+                    return_type: function.return_type,
+                    body: TypedExpression::None,
+                });
+            }
+            Statement::VariableDefinition(s) => todo!(),
+            Statement::Return(s) => todo!(),
+        }
+    }
+
+    Module {
+        id: module.id,
+        functions,
+    }
+}
+
+// pub fn typecheck_expression(expr: Expression) -> TypedExpression {
+// }
+
+// pub fn typecheck_statement(statement: Statement, env: Rc<Environment>) -> TypedStatement {
+//     match statement {
+//         Statement::Module(m) => TypedStatement::Module(typecheck_module(*m, env)),
+//         Statement::ExternFunctionDeclaration(_) => TypedStatement::None,
+//         Statement::FunctionDefinition(s) => TypedStatement::None,
+//         Statement::VariableDefinition(s) => TypedStatement::None,
+//         Statement::Return(s) => TypedStatement::None,
+//     }
+// }
+//
+// pub fn typecheck_function(function: FunctionDefinitionStatement, env: Rc<Environment>) {
+//     // let mut env = Environment::put(env);
+//     // for (id, type_) in &function.parameters {
+//     //     env.insert(id.clone(), type_.clone())
+//     // }
+//     // env.insert(
+//     //     Identifier {
+//     //         value: String::from("expected_return_type"),
+//     //     },
+//     //     function.return_type.clone(),
+//     // );
+//     // let env = Rc::new(env);
+//     // let body_return_type = function.body.accept(env, self);
+//     //
+//     // if function.return_type != body_return_type {
+//     //     panic!(
+//     //         concat!(
+//     //             "In function named {}: expected return type {:?}",
+//     //             " differs from function's body return type {:?}"
+//     //         ),
+//     //         function.id.value, function.return_type, body_return_type,
+//     //     );
+//     // }
+//     //
+//     // ()
+// }
+
 struct TypeChecker {}
 
 use std::rc::Rc;
@@ -413,9 +527,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Function definition inside block is not allowed"
-    )]
+    #[should_panic(expected = "Function definition inside block is not allowed")]
     fn function_def_inside_block() {
         use crate::parser::ModuleParser;
         let code = "

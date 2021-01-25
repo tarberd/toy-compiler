@@ -1,12 +1,5 @@
-fn puts();
+fn double(my_int: i32): i32  => my_int * my_int;
 
-fn double(my_int: i32) => my_int * my_int;
-
-fn main() => {
-  let single_number: i32 = 6447714;
-  let reference: i32 = &single_number;
-  let multiple_numbers: [i32; 3] = [1819043176, 1870078063, 6581362, ];
-
-  let result: i32 = puts(multiple_numbers);
-  result
+fn main(): i32 => {
+  5_i32
 };

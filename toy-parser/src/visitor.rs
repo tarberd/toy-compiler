@@ -35,9 +35,6 @@ pub trait AstVisitor<Environment, Return> {
     fn visit_call_expression(&mut self, env: Environment, call: &CallExpression) -> Return;
     fn visit_access_expression(&mut self, env: Environment, access: &AccessExpression) -> Return;
 
-    fn visit_array_literal(&mut self, env: Environment, array: &ArrayLiteral) -> Return;
-    fn visit_integer_literal(&mut self, env: Environment, literal: &IntegerLiteral) -> Return;
-    fn visit_boolean_literal(&mut self, env: Environment, boolean: &BooleanLiteral) -> Return;
     fn visit_identifier(&mut self, env: Environment, id: &Identifier) -> Return;
 }
 
@@ -146,30 +143,6 @@ impl<V: AstVisitor<Environment, Return>, Environment, Return> Visitable<V, Envir
 {
     fn accept(&self, env: Environment, visitor: &mut V) -> Return {
         visitor.visit_access_expression(env, self)
-    }
-}
-
-impl<V: AstVisitor<Environment, Return>, Environment, Return> Visitable<V, Environment, Return>
-    for ArrayLiteral
-{
-    fn accept(&self, env: Environment, visitor: &mut V) -> Return {
-        visitor.visit_array_literal(env, self)
-    }
-}
-
-impl<V: AstVisitor<Environment, Return>, Environment, Return> Visitable<V, Environment, Return>
-    for IntegerLiteral
-{
-    fn accept(&self, env: Environment, visitor: &mut V) -> Return {
-        visitor.visit_integer_literal(env, self)
-    }
-}
-
-impl<V: AstVisitor<Environment, Return>, Environment, Return> Visitable<V, Environment, Return>
-    for BooleanLiteral
-{
-    fn accept(&self, env: Environment, visitor: &mut V) -> Return {
-        visitor.visit_boolean_literal(env, self)
     }
 }
 

@@ -121,7 +121,11 @@ impl AstVisitor<Environment, Environment> for EnvironmentBuilder {
         env
     }
 
-    fn visit_return_statement(&mut self, env: Environment, return_statement: &ReturnStatement) -> Self::Return {
+    fn visit_return_statement(
+        &mut self,
+        env: Environment,
+        return_statement: &ReturnStatement,
+    ) -> Self::Return {
         env
     }
 
@@ -167,28 +171,14 @@ impl AstVisitor<Environment, Environment> for EnvironmentBuilder {
     ) -> Self::Return {
         todo!()
     }
-    fn visit_array_literal(
-        &mut self,
-        _env: Self::Environment,
-        _array: &ArrayLiteral,
-    ) -> Self::Return {
-        todo!()
-    }
-    fn visit_integer_literal(
-        &mut self,
-        _env: Self::Environment,
-        _literal: &IntegerLiteral,
-    ) -> Self::Return {
-        todo!()
-    }
-    fn visit_boolean_literal(&mut self, _env: Environment, _boolean: &BooleanLiteral) -> Environment {
-        todo!()
-    }
     fn visit_identifier(&mut self, _env: Self::Environment, _id: &Identifier) -> Self::Return {
         todo!()
     }
-
-    fn visit_if_expression(&mut self, _env: Environment, _if_expression: &IfExpression) -> Environment {
+    fn visit_if_expression(
+        &mut self,
+        _env: Environment,
+        _if_expression: &IfExpression,
+    ) -> Environment {
         todo!()
     }
 }

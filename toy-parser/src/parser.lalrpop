@@ -82,22 +82,25 @@ Return: ReturnStatement = {
 
 Type: Type = {
     BooleanType,
-    IntegerType,
+    IntType => Type::Int(<>),
+    UIntType => Type::UInt(<>),
     PointerType,
-    ArrayType,
 };
 
-IntegerType: Type = {
-    "i8" => Type::I8,
-    "i16" => Type::I16,
-    "i32" => Type::I32,
-    "i64" => Type::I64,
-    "isize" => Type::ISize,
-    "u8" => Type::U8,
-    "u16" => Type::U16,
-    "u32" => Type::U32,
-    "u64" => Type::U64,
-    "usize" => Type::USize,
+IntType: IntType = {
+    "i8" => IntType::I8,
+    "i16" => IntType::I16,
+    "i32" => IntType::I32,
+    "i64" => IntType::I64,
+    "isize" => IntType::ISize,
+};
+
+UIntType: UIntType = {
+    "u8" => UIntType::U8,
+    "u16" => UIntType::U16,
+    "u32" => UIntType::U32,
+    "u64" => UIntType::U64,
+    "usize" => UIntType::USize,
 };
 
 BooleanType: Type = {
@@ -106,15 +109,6 @@ BooleanType: Type = {
 
 PointerType: Type = {
     "*" <type_id: Type> => Type::Pointer { type_id: Box::new(type_id) },
-};
-
-ArrayType: Type = {
-    "[" <type_id: Type> ";" <size: Expression> "]" => {
-        Type::Array {
-            type_id: Box::new(type_id),
-            size,
-        }
-    },
 };
 
 Identifier: Identifier = {
@@ -272,37 +266,34 @@ NestedExpression: Expression = {
 };
 
 LeafExpression: Expression = {
-    ArrayLiteral => Expression::Array(<>),
-    IntegerLiteral => Expression::Integer(Box::new(<>)),
-    BooleanLiteral => Expression::Boolean(<>),
+    Literal => Expression::Literal(<>),
     Identifier => Expression::Identifier(<>),
 };
 
-IntegerLiteral: IntegerLiteral = {
-    <value: r"([[:digit:]]+_*)+"> <suffix: IntegerType?> => {
+Literal: Literal = {
+    IntLiteral,
+    BooleanLiteral,
+};
+
+IntLiteral: Literal = {
+    <value: r"([[:digit:]]+_*)+"> <suffix: IntType> => {
         let value = value.to_string().replace("_", "");
-        match suffix {
-            Some(suffix) => {
-                IntegerLiteral {
-                    value: value.parse().unwrap(),
-                    type_: suffix,
-                }
-            },
-            None => {
-                IntegerLiteral {
-                    value: value.parse().unwrap(),
-                    type_: Type::IntegerLiteral,
-                }
-            },
-        }
+        let literal_type = LiteralIntType::Signed(suffix);
+        Literal::Int(value.parse().unwrap(), literal_type)
+    },
+    <value: r"([[:digit:]]+_*)+"> <suffix: UIntType> => {
+        let value = value.to_string().replace("_", "");
+        let literal_type = LiteralIntType::Unsigned(suffix);
+        Literal::Int(value.parse().unwrap(), literal_type)
+    },
+    <value: r"([[:digit:]]+_*)+"> => {
+        let value = value.to_string().replace("_", "");
+        let literal_type = LiteralIntType::Unsufixed;
+        Literal::Int(value.parse().unwrap(), literal_type)
     },
 };
 
-BooleanLiteral: BooleanLiteral = {
-    "true" => BooleanLiteral { value: true },
-    "false" => BooleanLiteral { value: false },
+BooleanLiteral: Literal = {
+    "true" => Literal::Boolean(true),
+    "false" => Literal::Boolean(false),
 }
-
-ArrayLiteral: ArrayLiteral = {
-    "[" <initialize_expressions: ExpressionList> "]" => ArrayLiteral { initialize_expressions },
-};

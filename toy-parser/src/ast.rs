@@ -2,25 +2,12 @@
 pub enum Type {
     Boolean,
 
-    I8,
-    U8,
-    I16,
-    U16,
-    I32,
-    U32,
-    I64,
-    U64,
-    ISize,
-    USize,
-    IntegerLiteral,
+    Int(IntType),
+    UInt(UIntType),
 
     Void,
     Pointer {
         type_id: Box<Type>,
-    },
-    Array {
-        type_id: Box<Type>,
-        size: Expression,
     },
 
     Function {
@@ -31,37 +18,64 @@ pub enum Type {
     None,
 }
 
+#[derive(Clone, Debug)]
+pub enum Literal {
+    Int(u128, LiteralIntType),
+    Boolean(bool),
+}
+
+impl Literal {
+    pub fn type_(&self) -> Type {
+        match self {
+            Literal::Int(_, t) => match t {
+                LiteralIntType::Signed(t) => Type::Int(t.clone()),
+                LiteralIntType::Unsigned(t) => Type::UInt(t.clone()),
+                LiteralIntType::Unsufixed => Type::None,
+            },
+            Literal::Boolean(_) => Type::Boolean,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum LiteralIntType {
+    Signed(IntType),
+    Unsigned(UIntType),
+    Unsufixed,
+}
+
+#[derive(Clone, Debug)]
+pub enum IntType {
+    ISize,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+}
+
+#[derive(Clone, Debug)]
+pub enum UIntType {
+    USize,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+}
+
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         use Type::*;
         match (self, other) {
             (Boolean, Boolean) => true,
-            (I8, I8) => true,
-            (U8, U8) => true,
-            (I16, I16) => true,
-            (U16, U16) => true,
-            (I32, I32) => true,
-            (U32, U32) => true,
-            (I64, I64) => true,
-            (U64, U64) => true,
-            (ISize, ISize) => true,
-            (USize, USize) => true,
-            (IntegerLiteral, IntegerLiteral) => true,
+            (Int(_), Int(_)) => true,
+            (UInt(_), UInt(_)) => true,
             (Void, Void) => true,
             (
                 Pointer { type_id: type_self },
                 Pointer {
                     type_id: type_other,
-                },
-            ) => type_self.eq(type_other),
-            (
-                Array {
-                    type_id: type_self,
-                    size: _,
-                },
-                Array {
-                    type_id: type_other,
-                    size: _,
                 },
             ) => type_self.eq(type_other),
             (
@@ -159,22 +173,6 @@ pub struct AccessExpression {
     pub offset: Expression,
 }
 
-#[derive(Clone, Debug)]
-pub struct ArrayLiteral {
-    pub initialize_expressions: Vec<Expression>,
-}
-
-#[derive(Clone, Debug)]
-pub struct IntegerLiteral {
-    pub value: isize,
-    pub type_: Type,
-}
-
-#[derive(Clone, Debug)]
-pub struct BooleanLiteral {
-    pub value: bool,
-}
-
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
 pub struct Identifier {
     pub value: String,
@@ -194,10 +192,8 @@ pub enum Expression {
     If(Box<IfExpression>),
     Call(Box<CallExpression>),
     Access(Box<AccessExpression>),
-    Array(ArrayLiteral),
-    Integer(Box<IntegerLiteral>),
-    Boolean(BooleanLiteral),
     Identifier(Identifier),
+    Literal(Literal),
 }
 
 #[derive(Clone, Copy, Debug)]

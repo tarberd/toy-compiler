@@ -1,5 +1,3 @@
-fn double(my_int: i32): i32  => my_int * my_int;
-
 fn main(): i32 => {
   5_i32
 };

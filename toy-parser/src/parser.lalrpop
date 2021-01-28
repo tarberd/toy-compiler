@@ -23,15 +23,10 @@ Statement: Statement = {
 };
 
 ExternFunctionDeclaration: ExternFunctionDeclarationStatement = {
-    "extern" "fn" <id: Identifier> "(" <parameters: ParameterList?> ")" <return_type: (":" Type)?> => {
+    "extern" "fn" <id: Identifier> "(" <parameters: ParameterList?> ")" ":" <return_type: Type> => {
         let parameters = match parameters {
             Some(parameters) => parameters,
             None => vec![],
-        };
-
-        let return_type = match return_type {
-            Some((_, type_)) => type_,
-            None => Type::Void,
         };
 
         ExternFunctionDeclarationStatement { id, parameters, return_type }
@@ -39,15 +34,10 @@ ExternFunctionDeclaration: ExternFunctionDeclarationStatement = {
 };
 
 FunctionDefinition: FunctionDefinitionStatement = {
-    "fn" <id: Identifier> "(" <parameters: ParameterList?>  ")" <return_type: (":" Type)?> "=>" <body: Expression> => {
+    "fn" <id: Identifier> "(" <parameters: ParameterList?>  ")" ":" <return_type: Type> "=>" <body: Expression> => {
         let parameters = match parameters {
             Some(parameters) => parameters,
             None => vec![],
-        };
-
-        let return_type = match return_type {
-            Some((_, type_)) => type_,
-            None => Type::Void,
         };
 
         FunctionDefinitionStatement { id, parameters, return_type, body }
@@ -84,7 +74,6 @@ Type: Type = {
     BooleanType,
     IntType => Type::Int(<>),
     UIntType => Type::UInt(<>),
-    PointerType,
 };
 
 IntType: IntType = {
@@ -107,14 +96,9 @@ BooleanType: Type = {
     "bool" => Type::Boolean,
 };
 
-PointerType: Type = {
-    "*" <type_id: Type> => Type::Pointer { type_id: Box::new(type_id) },
-};
-
 Identifier: Identifier = {
     r"[_[:alpha:]][_[:alnum:]]*" => Identifier { value: <>.to_string() },
 };
-
 
 Expression: Expression = {
     BinaryBooleanExpression,

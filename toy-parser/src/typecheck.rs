@@ -1,52 +1,65 @@
-use crate::ast::*;
+use crate::ast::{self, Type};
 use crate::environment_builder::{Environment, EnvironmentBuilder};
 use crate::visitor::AstVisitor;
 use std::rc::Rc;
 
-#[derive(Debug)]
-pub enum TypedStatement {
-    Module(Module),
-    None,
-}
+pub mod ir {
+    use crate::ast::{self, Type};
+    #[derive(Debug)]
+    pub enum Statement {
+        Module(Module),
+        None,
+    }
 
-#[derive(Debug)]
-pub struct Module {
-    pub id: Identifier,
-    pub functions: Vec<Function>,
-}
+    #[derive(Debug)]
+    pub struct Module {
+        pub id: ast::Identifier,
+        pub functions: Vec<Function>,
+    }
 
-#[derive(Debug)]
-pub struct Function {
-    pub id: Identifier,
-    pub parameters: Vec<(Identifier, Type)>,
-    pub return_type: Type,
-    pub body: TypedExpression,
-}
+    #[derive(Debug)]
+    pub struct Function {
+        pub id: ast::Identifier,
+        pub parameters: Vec<(ast::Identifier, ast::Type)>,
+        pub return_type: ast::Type,
+        pub body: Expression,
+    }
 
-#[derive(Debug)]
-pub enum TypedExpression {
-    Block(Box<Block>),
-    Literal(Literal),
-    None,
-}
+    #[derive(Debug)]
+    pub enum Expression {
+        Block(Box<BlockExpression>),
+        Binary(Box<BinaryExpression>),
+        Literal(ast::Literal),
+        None,
+    }
 
-impl TypedExpression {
-    pub fn type_(&self) -> Type {
-        match self {
-            TypedExpression::Block(block) => block.type_.clone(),
-            TypedExpression::Literal(literal) => literal.type_(),
-            _ => todo!(),
+    impl Expression {
+        pub fn type_(&self) -> Type {
+            match self {
+                Expression::Literal(literal) => literal.type_(),
+                Expression::Binary(bin_op) => bin_op.type_.clone(),
+                Expression::Block(block) => block.type_.clone(),
+                _ => todo!(),
+            }
         }
+    }
+
+    #[derive(Debug)]
+    pub struct BlockExpression {
+        pub type_: Type,
+        pub return_expression: Expression,
+    }
+
+    #[derive(Debug)]
+    pub struct BinaryExpression {
+        pub type_: Type,
+        pub operator: ast::BinaryOperator,
+        pub lhs: Expression,
+        pub rhs: Expression,
     }
 }
 
-#[derive(Debug)]
-pub struct Block {
-    pub return_expression: TypedExpression,
-    pub type_: Type,
-}
-
-pub fn typecheck_root_module(root_module: ModuleStatement) -> Module {
+pub fn typecheck_root_module(root_module: ast::ModuleStatement) -> ir::Module {
     let mut env_builder = EnvironmentBuilder {};
     let env = Environment::new();
     let env = env_builder.visit_module_statement(env, &root_module);
@@ -54,47 +67,63 @@ pub fn typecheck_root_module(root_module: ModuleStatement) -> Module {
     typecheck_module(root_module, Rc::new(env))
 }
 
-pub fn typecheck_module(module: ModuleStatement, _env: Rc<Environment>) -> Module {
+pub fn typecheck_module(module: ast::ModuleStatement, _env: Rc<Environment>) -> ir::Module {
     let mut functions = vec![];
 
     for statement in module.statements {
         match statement {
-            Statement::Module(_) => todo!(),
-            Statement::ExternFunctionDeclaration(_) => todo!(),
-            Statement::FunctionDefinition(function) => {
-                functions.push(Function {
+            ast::Statement::Module(_) => todo!(),
+            ast::Statement::ExternFunctionDeclaration(_) => todo!(),
+            ast::Statement::FunctionDefinition(function) => {
+                let function = ir::Function {
                     id: function.id,
                     parameters: function.parameters,
                     return_type: function.return_type,
                     body: typecheck_expression(function.body),
-                });
+                };
+                functions.push(function);
             }
-            Statement::VariableDefinition(_) => todo!(),
-            Statement::Return(_) => todo!(),
+            ast::Statement::VariableDefinition(_) => todo!(),
+            ast::Statement::Return(_) => todo!(),
         }
     }
 
-    Module {
+    ir::Module {
         id: module.id,
         functions,
     }
 }
 
-pub fn typecheck_expression(expr: Expression) -> TypedExpression {
+pub fn typecheck_expression(expr: ast::Expression) -> ir::Expression {
     match expr {
-        Expression::Block(block) => TypedExpression::Block(Box::new(typecheck_block(*block))),
-        Expression::Literal(literal) => TypedExpression::Literal(literal),
+        ast::Expression::Literal(literal) => ir::Expression::Literal(literal),
+        ast::Expression::Binary(bin_expr) => {
+            ir::Expression::Binary(Box::new(typecheck_binary_expression(*bin_expr)))
+        }
+        ast::Expression::Block(block) => ir::Expression::Block(Box::new(typecheck_block(*block))),
         _ => todo!(),
     }
 }
 
-pub fn typecheck_block(block: BlockExpression) -> Block {
+pub fn typecheck_binary_expression(bin_expr: ast::BinaryExpression) -> ir::BinaryExpression {
+    let lhs = typecheck_expression(bin_expr.left);
+    let rhs = typecheck_expression(bin_expr.right);
+
+    ir::BinaryExpression {
+        type_: lhs.type_(),
+        operator: bin_expr.operator,
+        lhs,
+        rhs,
+    }
+}
+
+pub fn typecheck_block(block: ast::BlockExpression) -> ir::BlockExpression {
     let return_expression = match block.return_expression {
         Some(expr) => typecheck_expression(expr),
         _ => todo!(),
     };
 
-    Block {
+    ir::BlockExpression {
         type_: return_expression.type_().clone(),
         return_expression,
     }

@@ -1,20 +1,12 @@
 #[derive(Clone, Debug)]
 pub enum Type {
     Boolean,
-
     Int(IntType),
     UInt(UIntType),
-
-    Void,
-    Pointer {
-        type_id: Box<Type>,
-    },
-
     Function {
         parameters: Vec<Type>,
         return_type: Box<Type>,
     },
-
     None,
 }
 
@@ -71,13 +63,6 @@ impl PartialEq for Type {
             (Boolean, Boolean) => true,
             (Int(_), Int(_)) => true,
             (UInt(_), UInt(_)) => true,
-            (Void, Void) => true,
-            (
-                Pointer { type_id: type_self },
-                Pointer {
-                    type_id: type_other,
-                },
-            ) => type_self.eq(type_other),
             (
                 Function {
                     parameters,
@@ -210,7 +195,6 @@ pub enum BinaryOperator {
     Equal,
     LessEqualThan,
     LessThan,
-
     And,
     Or,
     Plus,

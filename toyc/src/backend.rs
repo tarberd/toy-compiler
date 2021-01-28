@@ -1,8 +1,8 @@
 use llvm_sys as llvm;
 use std::collections::HashMap;
-use std::ffi::CString;
-use toy_parser::ast::{IntType, Literal, LiteralIntType, UIntType};
-use toy_parser::typecheck::{Block, Module, TypedExpression};
+use std::ffi::{CStr, CString};
+use toy_parser::ast::{BinaryOperator, IntType, Literal, LiteralIntType};
+use toy_parser::typecheck::ir::{BinaryExpression, BlockExpression, Expression, Module};
 
 pub struct ActivationRecords {
     table_stack: Vec<HashMap<String, *mut llvm::LLVMValue>>,
@@ -132,11 +132,14 @@ pub fn populate_llvm_module(llvm_module: *mut llvm::LLVMModule, src_module: Modu
 fn build_llvm_expression(
     llvm_module: *mut llvm::LLVMModule,
     llvm_builder: *mut llvm::LLVMBuilder,
-    expr: &TypedExpression,
+    expr: &Expression,
 ) -> *mut llvm::LLVMValue {
     match expr {
-        TypedExpression::Block(block) => build_llvm_block(llvm_module, llvm_builder, block),
-        TypedExpression::Literal(literal) => build_llvm_literal(llvm_module, llvm_builder, literal),
+        Expression::Literal(literal) => build_llvm_literal(llvm_module, llvm_builder, literal),
+        Expression::Binary(bin_expr) => {
+            build_llvm_binary_operation(llvm_module, llvm_builder, bin_expr)
+        }
+        Expression::Block(block) => build_llvm_block(llvm_module, llvm_builder, block),
         _ => todo!(),
     }
 }
@@ -144,14 +147,32 @@ fn build_llvm_expression(
 fn build_llvm_block(
     llvm_module: *mut llvm::LLVMModule,
     llvm_builder: *mut llvm::LLVMBuilder,
-    block: &Block,
+    block: &BlockExpression,
 ) -> *mut llvm::LLVMValue {
     build_llvm_expression(llvm_module, llvm_builder, &block.return_expression)
 }
 
-fn build_llvm_literal(
+fn build_llvm_binary_operation(
     llvm_module: *mut llvm::LLVMModule,
     llvm_builder: *mut llvm::LLVMBuilder,
+    bin_op: &BinaryExpression,
+) -> *mut llvm::LLVMValue {
+    match bin_op.operator {
+        BinaryOperator::Plus => unsafe {
+            llvm::core::LLVMBuildAdd(
+                llvm_builder,
+                build_llvm_expression(llvm_module, llvm_builder, &bin_op.lhs),
+                build_llvm_expression(llvm_module, llvm_builder, &bin_op.rhs),
+                CStr::from_bytes_with_nul_unchecked(b"add_tmp\0").as_ptr(),
+            )
+        },
+        _ => todo!(),
+    }
+}
+
+fn build_llvm_literal(
+    _llvm_module: *mut llvm::LLVMModule,
+    _llvm_builder: *mut llvm::LLVMBuilder,
     literal: &Literal,
 ) -> *mut llvm::LLVMValue {
     match literal {
@@ -166,7 +187,7 @@ fn build_llvm_literal(
                 },
                 _ => todo!(),
             },
-            LiteralIntType::Unsigned(ty) => todo!(),
+            LiteralIntType::Unsigned(_ty) => todo!(),
             LiteralIntType::Unsufixed => todo!(),
         },
         _ => todo!(),

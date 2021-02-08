@@ -149,6 +149,8 @@ fn build_llvm_block(
     llvm_builder: *mut llvm::LLVMBuilder,
     block: &BlockExpression,
 ) -> *mut llvm::LLVMValue {
+    while let Some(statement) = block.statements.iter().next() {
+    }
     build_llvm_expression(llvm_module, llvm_builder, &block.return_expression)
 }
 

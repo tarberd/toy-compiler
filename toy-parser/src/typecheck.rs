@@ -1,14 +1,22 @@
-use crate::ast::{self, Type};
+use crate::ast;
 use crate::environment_builder::{Environment, EnvironmentBuilder};
-use crate::visitor::AstVisitor;
+use crate::visitor::{AstVisitor, Visitable};
 use std::rc::Rc;
 
 pub mod ir {
-    use crate::ast::{self, Type};
+    use crate::ast::{self, Identifier, Type};
     #[derive(Debug)]
     pub enum Statement {
         Module(Module),
+        LetStatement(LetStatement),
         None,
+    }
+
+    #[derive(Debug)]
+    pub struct LetStatement {
+        pub id: Identifier,
+        pub type_: Type,
+        pub expression: Expression,
     }
 
     #[derive(Debug)]
@@ -47,6 +55,7 @@ pub mod ir {
     #[derive(Debug)]
     pub struct BlockExpression {
         pub type_: Type,
+        pub statements: Vec<Statement>,
         pub return_expression: Expression,
     }
 
@@ -67,7 +76,7 @@ pub fn typecheck_root_module(root_module: ast::ModuleStatement) -> ir::Module {
     typecheck_module(root_module, Rc::new(env))
 }
 
-pub fn typecheck_module(module: ast::ModuleStatement, _env: Rc<Environment>) -> ir::Module {
+pub fn typecheck_module(module: ast::ModuleStatement, env: Rc<Environment>) -> ir::Module {
     let mut functions = vec![];
 
     for statement in module.statements {
@@ -79,7 +88,7 @@ pub fn typecheck_module(module: ast::ModuleStatement, _env: Rc<Environment>) -> 
                     id: function.id,
                     parameters: function.parameters,
                     return_type: function.return_type,
-                    body: typecheck_expression(function.body),
+                    body: typecheck_expression(function.body, Rc::clone(&env)),
                 };
                 functions.push(function);
             }
@@ -94,20 +103,25 @@ pub fn typecheck_module(module: ast::ModuleStatement, _env: Rc<Environment>) -> 
     }
 }
 
-pub fn typecheck_expression(expr: ast::Expression) -> ir::Expression {
+pub fn typecheck_expression(expr: ast::Expression, env: Rc<Environment>) -> ir::Expression {
     match expr {
         ast::Expression::Literal(literal) => ir::Expression::Literal(literal),
         ast::Expression::Binary(bin_expr) => {
-            ir::Expression::Binary(Box::new(typecheck_binary_expression(*bin_expr)))
+            ir::Expression::Binary(Box::new(typecheck_binary_expression(*bin_expr, env)))
         }
-        ast::Expression::Block(block) => ir::Expression::Block(Box::new(typecheck_block(*block))),
+        ast::Expression::Block(block) => {
+            ir::Expression::Block(Box::new(typecheck_block(*block, env)))
+        }
         _ => todo!(),
     }
 }
 
-pub fn typecheck_binary_expression(bin_expr: ast::BinaryExpression) -> ir::BinaryExpression {
-    let lhs = typecheck_expression(bin_expr.left);
-    let rhs = typecheck_expression(bin_expr.right);
+pub fn typecheck_binary_expression(
+    bin_expr: ast::BinaryExpression,
+    env: Rc<Environment>,
+) -> ir::BinaryExpression {
+    let lhs = typecheck_expression(bin_expr.left, Rc::clone(&env));
+    let rhs = typecheck_expression(bin_expr.right, env);
 
     ir::BinaryExpression {
         type_: lhs.type_(),
@@ -117,15 +131,45 @@ pub fn typecheck_binary_expression(bin_expr: ast::BinaryExpression) -> ir::Binar
     }
 }
 
-pub fn typecheck_block(block: ast::BlockExpression) -> ir::BlockExpression {
+pub fn typecheck_block(block: ast::BlockExpression, env: Rc<Environment>) -> ir::BlockExpression {
+    let mut statements = vec![];
+
+    let mut env = Environment::put(env);
+
+    let mut env_builder = EnvironmentBuilder {};
+
+    for statement in block.statements {
+        match statement {
+            ast::Statement::VariableDefinition(def) => {
+                let new_env = env_builder.visit_variable_definition_statement(env.clone(), &def);
+                let ir_def = typecheck_let_statement(*def, Rc::new(env));
+                statements.push(ir::Statement::LetStatement(ir_def));
+                env = new_env;
+            }
+            _ => todo!(),
+        }
+    }
+
     let return_expression = match block.return_expression {
-        Some(expr) => typecheck_expression(expr),
+        Some(expr) => typecheck_expression(expr, Rc::new(env)),
         _ => todo!(),
     };
 
     ir::BlockExpression {
         type_: return_expression.type_().clone(),
+        statements: vec![],
         return_expression,
+    }
+}
+
+pub fn typecheck_let_statement(
+    def: ast::VariableDefinitionStatement,
+    env: Rc<Environment>,
+) -> ir::LetStatement {
+    ir::LetStatement {
+        id: def.id,
+        type_: def.type_,
+        expression: typecheck_expression(def.initialize_expression, env),
     }
 }
 

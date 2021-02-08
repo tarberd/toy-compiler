@@ -4,7 +4,7 @@ use crate::visitor::{AstVisitor, Visitable};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Environment {
     table: HashMap<Identifier, Type>,
     father: Option<Rc<Self>>,

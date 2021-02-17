@@ -1,0 +1,13 @@
+[package]
+name = "toy-parser2"
+version = "0.1.0"
+authors = ["tarberd <bernardo.mferrari@gmail.com>"]
+edition = "2018"
+
+[build-dependencies] # <-- We added this and everything after!
+lalrpop = "0.19"
+
+[dependencies]
+lalrpop-util = "0.19"
+regex = "1"
+toy-lexer = { path = "../toy-lexer" }

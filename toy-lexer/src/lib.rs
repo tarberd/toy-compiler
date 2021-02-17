@@ -1,6 +1,6 @@
 use self::LiteralKind::*;
-use self::TokenKind::*;
-use std::str::Chars;
+use self::Token::*;
+use std::str::{CharIndices, Chars};
 
 fn subslice_offset(outer: &str, inner: &str) -> usize {
     let self_beg = outer.as_ptr() as usize;
@@ -9,19 +9,31 @@ fn subslice_offset(outer: &str, inner: &str) -> usize {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Token<'input> {
-    pub kind: TokenKind<'input>,
-    pub lexeme: &'input str,
+pub struct Span {
+    pub offset: usize,
+    pub len: usize,
 }
 
-impl<'input> Token<'input> {
-    fn new(kind: TokenKind<'input>, lexeme: &'input str) -> Token<'input> {
-        Token { kind, lexeme }
+impl Span {
+    pub fn new(offset: usize, len: usize) -> Self {
+        Self { offset, len }
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub enum TokenKind<'input> {
+pub struct SpannedToken {
+    pub token: Token,
+    pub span: Span,
+}
+
+impl SpannedToken {
+    fn new(token: Token, span: Span) -> Self {
+        Self { token, span }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Token {
     /// ";"
     Semicolon,
     /// ":"
@@ -60,27 +72,38 @@ pub enum TokenKind<'input> {
     Let,
     /// "an idendifier"
     Identifier,
-    Literal(LiteralKind<'input>),
+    Literal(LiteralKind),
 
+    WhiteSpace,
     Unknown,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum LiteralKind<'input> {
-    Integer {
-        number: &'input str,
-        suffix: Option<&'input str>,
-    },
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LiteralKind {
+    Integer { suffix_offset: Option<usize> },
 }
 
 #[derive(Debug)]
-pub struct Tokens<'input> {
-    remainder: &'input str,
+pub struct SpannedTokens<'input> {
+    remainder: CharIndices<'input>,
 }
 
-impl Tokens<'_> {
-    pub fn new(input: &str) -> Tokens {
-        Tokens { remainder: input }
+impl<'input> SpannedTokens<'input> {
+    pub fn new(input: &'input str) -> Self {
+        Self {
+            remainder: input.char_indices(),
+        }
+    }
+}
+
+impl<'input> Iterator for SpannedTokens<'input> {
+    type Item = SpannedToken;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (initial, _) = self.remainder.clone().nth(0)?;
+        let (token, lexeme, _) = parse_token(self.remainder.as_str())?;
+        self.remainder.nth(lexeme.len() - 1);
+        Some(SpannedToken::new(token, Span::new(initial, lexeme.len())))
     }
 }
 
@@ -92,25 +115,18 @@ fn is_id_continue(c: char) -> bool {
     is_id_start(c) || ('0'..='9').contains(&c)
 }
 
-fn eat_identifier(chars: &mut Chars) {
-    let mut chars_id = chars.clone();
-    while let Some(c) = chars_id.next() {
-        if is_id_continue(c) {
-            chars.next();
-        } else {
-            break;
-        }
-    }
-}
-
 fn is_decimal_digit(c: char) -> bool {
     ('0'..='9').contains(&c) || '_' == c
 }
 
-fn eat_decimal_digits(chars: &mut Chars) {
-    let mut chars_num = chars.clone();
-    while let Some(c) = chars_num.next() {
-        if is_decimal_digit(c) {
+fn is_whitespace(c: char) -> bool {
+    ' ' == c || '\t' == c || '\n' == c
+}
+
+fn eat_while(chars: &mut Chars, predicate: fn(char) -> bool) {
+    let mut chars_id = chars.clone();
+    while let Some(c) = chars_id.next() {
+        if predicate(c) {
             chars.next();
         } else {
             break;
@@ -118,9 +134,26 @@ fn eat_decimal_digits(chars: &mut Chars) {
     }
 }
 
-pub fn parse_token(input: &str) -> Option<(Token, &str)> {
+fn eat_identifier(chars: &mut Chars) {
+    eat_while(chars, is_id_continue);
+}
+
+fn eat_decimal_digits(chars: &mut Chars) {
+    eat_while(chars, is_decimal_digit);
+}
+
+fn eat_whitespace(chars: &mut Chars) {
+    eat_while(chars, is_whitespace);
+}
+
+/// returns (token parsed, lexeme of the token parsed, remainder)
+pub fn parse_token(input: &str) -> Option<(Token, &str, &str)> {
     let mut chars = input.chars();
-    let token_kind = match chars.next()? {
+    let token = match chars.next()? {
+        c if is_whitespace(c) => {
+            eat_whitespace(&mut chars);
+            WhiteSpace
+        }
         ';' => Semicolon,
         ',' => Comma,
         ':' => Colon,
@@ -170,18 +203,15 @@ pub fn parse_token(input: &str) -> Option<(Token, &str)> {
                     chars = chars_id.clone();
                 }
             }
-            let number_offset = subslice_offset(input, chars_num.as_str());
-            let number = &input[0..number_offset];
-            let suffix_offset = subslice_offset(input, chars_id.as_str());
-            if number_offset < suffix_offset {
+            let suffix_offset = subslice_offset(input, chars_num.as_str());
+            let token_offset = subslice_offset(input, chars.as_str());
+            if suffix_offset < token_offset {
                 Literal(Integer {
-                    number,
-                    suffix: Some(&input[number_offset..suffix_offset]),
+                    suffix_offset: Some(suffix_offset),
                 })
             } else {
                 Literal(Integer {
-                    number,
-                    suffix: None,
+                    suffix_offset: None,
                 })
             }
         }
@@ -189,22 +219,7 @@ pub fn parse_token(input: &str) -> Option<(Token, &str)> {
     };
 
     let offset = subslice_offset(input, chars.as_str());
-    let token = Token::new(token_kind, &input[0..offset]);
-    Some((token, &input[offset..]))
-}
-
-impl<'input> Iterator for Tokens<'input> {
-    type Item = Token<'input>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (token, remainder) = parse_token(self.remainder)?;
-        self.remainder = remainder;
-        Some(token)
-    }
-}
-
-pub fn tokens(input: &str) -> impl Iterator<Item = Token> {
-    Tokens::new(input)
+    Some((token, &input[0..offset], &input[offset..]))
 }
 
 #[cfg(test)]
@@ -215,15 +230,15 @@ mod tests {
     fn empty() {
         let input = "";
 
-        let mut tokens = Tokens::new(input);
+        let mut tokens = SpannedTokens::new(input);
 
         assert_eq!(tokens.next(), None);
     }
 
-    fn test_single_token(input: &str, kind: TokenKind) {
-        let expected_result = Token::new(kind, input);
+    fn test_single_token(input: &str, token: Token) {
+        let expected_result = SpannedToken::new(token, Span::new(0, input.len()));
 
-        let mut tokens = Tokens::new(input);
+        let mut tokens = SpannedTokens::new(input);
 
         assert_eq!(tokens.next(), Some(expected_result));
         assert_eq!(tokens.next(), None);
@@ -267,8 +282,7 @@ mod tests {
             test_single_token(
                 &input,
                 Literal(Integer {
-                    number: &input,
-                    suffix: None,
+                    suffix_offset: None,
                 }),
             );
         }
@@ -276,41 +290,77 @@ mod tests {
         test_single_token(
             input,
             Literal(Integer {
-                number: input,
-                suffix: None,
+                suffix_offset: None,
             }),
         );
         let input = "9876543210123456789";
         test_single_token(
             input,
             Literal(Integer {
-                number: input,
-                suffix: None,
+                suffix_offset: None,
             }),
         );
         let input = "0______1_2_3_4_5_6_7_8_9_____";
         test_single_token(
             input,
             Literal(Integer {
-                number: input,
-                suffix: None,
+                suffix_offset: None,
             }),
         );
         let input = "0_AnI_d42_f";
         test_single_token(
             input,
             Literal(Integer {
-                number: &input[0..2],
-                suffix: Some(&input[2..]),
+                suffix_offset: Some(2),
             }),
         );
         let input = "0_for";
         test_single_token(
             input,
             Literal(Integer {
-                number: &input[0..2],
-                suffix: Some(&input[2..]),
+                suffix_offset: Some(2),
             }),
         );
+        let input = "01234_for";
+        test_single_token(
+            input,
+            Literal(Integer {
+                suffix_offset: Some(6),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_function() {
+        let src = "fn blerg() -> i32 { 5 }";
+
+        let expected = vec![
+            SpannedToken::new(Function, Span::new(0, 2)),
+            SpannedToken::new(WhiteSpace, Span::new(2, 1)),
+            SpannedToken::new(Identifier, Span::new(3, 5)),
+            SpannedToken::new(OpenParentheses, Span::new(8, 1)),
+            SpannedToken::new(CloseParentheses, Span::new(9, 1)),
+            SpannedToken::new(WhiteSpace, Span::new(10, 1)),
+            SpannedToken::new(Arrow, Span::new(11, 2)),
+            SpannedToken::new(WhiteSpace, Span::new(13, 1)),
+            SpannedToken::new(Identifier, Span::new(14, 3)),
+            SpannedToken::new(WhiteSpace, Span::new(17, 1)),
+            SpannedToken::new(OpenBrace, Span::new(18, 1)),
+            SpannedToken::new(WhiteSpace, Span::new(19, 1)),
+            SpannedToken::new(
+                Literal(LiteralKind::Integer {
+                    suffix_offset: None,
+                }),
+                Span::new(20, 1),
+            ),
+            SpannedToken::new(WhiteSpace, Span::new(21, 1)),
+            SpannedToken::new(CloseBrace, Span::new(22, 1)),
+        ];
+
+        let result: Vec<SpannedToken> = SpannedTokens::new(src).collect();
+
+        for (result, expected) in result.iter().zip(expected) {
+            assert_eq!(*result, expected);
+        }
     }
 }

@@ -1,0 +1,94 @@
+use crate::ast::*;
+use toy_lexer::{Token, LiteralKind, Span};
+
+grammar;
+
+extern {
+    type Location = usize;
+    type Error = ();
+
+    enum Token {
+        ";" => Token::Semicolon,
+        ":" => Token::Colon,
+        "," => Token::Comma,
+        "(" => Token::OpenParentheses,
+        ")" => Token::CloseParentheses,
+        "{" => Token::OpenBrace,
+        "}" => Token::CloseBrace,
+        "=" => Token::Equals,
+        "==" => Token::DoubleEquals,
+        "=>" => Token::FatArrow,
+        "->" => Token::Arrow,
+        "+" => Token::Plus,
+        "-" => Token::Minus,
+        "*" => Token::Asterisk,
+        "/" => Token::Slash,
+        "%" => Token::Percent,
+        "fn" => Token::Function,
+        "let" => Token::Let,
+        Identifier => Token::Identifier,
+        Literal => Token::Literal(<LiteralKind>),
+    }
+}
+
+pub RootModule: RootModule = {
+    <functions: Function*> => RootModule::new(functions),
+}
+
+Function: Function = {
+  "fn" <id: Id> "(" <params: ParameterList> ")"
+  "->" <return_type_id: Id> <body: Block> => {
+      Function::new(id, params, return_type_id, body)
+  }
+}
+
+ParameterList: Vec<Parameter> = {
+    <parameters: (Id ":" Id ",")*> => {
+        parameters.into_iter()
+            .map(|(id, _, type_id, _)| Parameter::new(id, type_id))
+            .collect()
+    }
+}
+
+Block: Block = {
+    "{" Expression "}" => Block::new(),
+}
+
+Id: Id = {
+   <l:@L> <id: Identifier> <r:@R> => Id::new(Span::new(l, r - l)),
+}
+
+Expression: Expression = {
+    Terms,
+}
+
+Terms: Expression = {
+    <lhs: Terms> <op: TermOp> <rhs: LiteralExpr> => {
+        Expression::new(
+            ExpressionKind::Binary(
+                Box::new(lhs),
+                op,
+                Box::new(rhs),
+            ),
+        )
+    },
+    LiteralExpr,
+}
+
+TermOp: BinaryOperator = {
+    "+" => BinaryOperator::Sum,
+}
+
+LiteralExpr: Expression = {
+    <lit: Literal> => {
+        match lit {
+            LiteralKind::Integer { suffix_offset } => {
+                Expression::new(
+                    ExpressionKind::Literal(
+                        Literal::Int(0, IntKind::I32)
+                    )
+                )
+            }
+        }
+    }
+}

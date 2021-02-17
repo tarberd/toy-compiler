@@ -4,5 +4,6 @@ members = [
     "toyc",
     "toy-lexer",
     "toy-parser",
+    "toy-parser2",
 ]
 

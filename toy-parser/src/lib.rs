@@ -1,5 +1,4 @@
 use lalrpop_util::lalrpop_mod;
-
 lalrpop_mod!(
     #[allow(
         clippy::needless_lifetimes,

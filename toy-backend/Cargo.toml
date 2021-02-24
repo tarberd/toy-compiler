@@ -1,5 +1,5 @@
 [package]
-name = "toyc2"
+name = "toy-backend"
 version = "0.1.0"
 authors = ["tarberd <bernardo.mferrari@gmail.com>"]
 edition = "2018"
@@ -8,6 +8,5 @@ edition = "2018"
 
 [dependencies]
 toy-parser2 = { path = "../toy-parser2" }
-toy-typecheck = { path = "../toy-typecheck" }
-toy-backend = { path = "../toy-backend" }
-
+toy-lexer = { path = "../toy-lexer" }
+llvm-sys = "110"

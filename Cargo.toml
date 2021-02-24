@@ -2,8 +2,11 @@
 
 members = [
     "toyc",
+    "toyc2",
     "toy-lexer",
     "toy-parser",
     "toy-parser2",
+    "toy-typecheck",
+    "toy-backend",
 ]
 

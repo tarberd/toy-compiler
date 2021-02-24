@@ -8,7 +8,7 @@ fn subslice_offset(outer: &str, inner: &str) -> usize {
     inner.wrapping_sub(self_beg)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Eq, Ord)]
 pub struct Span {
     pub offset: usize,
     pub len: usize,

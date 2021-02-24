@@ -1,5 +1,6 @@
 use toy_lexer::Span;
 
+#[derive(Debug)]
 pub struct RootModule {
     pub functions: Vec<Function>,
 }
@@ -10,6 +11,7 @@ impl RootModule {
     }
 }
 
+#[derive(Debug)]
 pub struct Function {
     pub id: Id,
     pub return_id: Id,
@@ -28,6 +30,7 @@ impl Function {
     }
 }
 
+#[derive(Debug)]
 pub struct Parameter {
     pub id: Id,
     pub type_id: Id,
@@ -39,48 +42,60 @@ impl Parameter {
     }
 }
 
-pub struct Block {}
+#[derive(Debug)]
+pub struct Block {
+    pub expression: Expression,
+}
 
 impl Block {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(expression: Expression) -> Self {
+        Self { expression }
     }
 }
 
+#[derive(Debug)]
 pub struct Id {
-    pub id: Span,
+    pub span: Span,
 }
 
 impl Id {
-    pub fn new(id: Span) -> Self {
-        Self { id }
+    pub fn new(span: Span) -> Self {
+        Self { span }
     }
 }
 
+#[derive(Debug)]
 pub struct Expression {
     pub kind: ExpressionKind,
+    pub span: Span,
 }
 
 impl Expression {
-    pub fn new(kind: ExpressionKind) -> Self {
-        Self { kind }
+    pub fn new(kind: ExpressionKind, span: Span) -> Self {
+        Self { kind, span }
     }
 }
 
+#[derive(Debug)]
 pub enum ExpressionKind {
-    Block(Block),
+    Block(Box<Block>),
     Binary(Box<Expression>, BinaryOperator, Box<Expression>),
     Literal(Literal),
 }
 
+#[derive(Debug)]
 pub enum BinaryOperator {
     Sum,
 }
 
-pub enum Literal {
-    Int(usize, IntKind),
+#[derive(Debug)]
+pub struct Literal {
+    pub literal: Span,
+    pub suffix: Option<Span>,
 }
 
-pub enum IntKind {
-    I32,
+impl Literal {
+    pub fn new(literal: Span, suffix: Option<Span>) -> Self {
+        Self {literal, suffix}
+    }
 }

@@ -20,7 +20,7 @@ lalrpop_mod!(
         clippy::let_and_return,
         clippy::inefficient_to_string
     )]
-    grammar,
+    pub larlpop_grammar,
     "/grammar/grammar.rs"
 );
 
@@ -57,10 +57,12 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let src = "fn blerg() -> i32 { 5 }";
+        let src = "fn blerg() -> i32 { 5five }";
 
-        let result = super::grammar::RootModuleParser::new()
+        let result = super::larlpop_grammar::RootModuleParser::new()
             .parse(Lexer::new(src))
             .unwrap();
+
+        println!("{:#?}", result);
     }
 }

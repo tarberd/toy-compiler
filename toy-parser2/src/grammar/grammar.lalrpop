@@ -43,15 +43,19 @@ Function: Function = {
 }
 
 ParameterList: Vec<Parameter> = {
-    <parameters: (Id ":" Id ",")*> => {
+    <parameters: (Id ":" Id ",")*> <trailing: (Id ":" Id)?> => {
         parameters.into_iter()
             .map(|(id, _, type_id, _)| Parameter::new(id, type_id))
+            .chain(
+                trailing.into_iter()
+                    .map(|(id, _, type_id)| Parameter::new(id, type_id))
+            )
             .collect()
     }
 }
 
 Block: Block = {
-    "{" Expression "}" => Block::new(),
+    "{" <expr: Expression> "}" => Block::new(expr),
 }
 
 Id: Id = {
@@ -63,13 +67,14 @@ Expression: Expression = {
 }
 
 Terms: Expression = {
-    <lhs: Terms> <op: TermOp> <rhs: LiteralExpr> => {
+    <l:@L> <lhs: Terms> <op: TermOp> <rhs: LiteralExpr> <r:@R> => {
         Expression::new(
             ExpressionKind::Binary(
                 Box::new(lhs),
                 op,
                 Box::new(rhs),
             ),
+            Span::new(l, r - l),
         )
     },
     LiteralExpr,
@@ -80,13 +85,20 @@ TermOp: BinaryOperator = {
 }
 
 LiteralExpr: Expression = {
-    <lit: Literal> => {
+    <l:@L> <lit: Literal> <r:@R> => {
         match lit {
             LiteralKind::Integer { suffix_offset } => {
                 Expression::new(
                     ExpressionKind::Literal(
-                        Literal::Int(0, IntKind::I32)
-                    )
+                        match suffix_offset {
+                            Some(off) => Literal::new(
+                                Span::new(l, off),
+                                Some(Span::new(l + off, r - (l + off))),
+                            ),
+                            None => Literal::new(Span::new(l, r-l), None),
+                        }
+                    ),
+                    Span::new(l, r - l),
                 )
             }
         }
